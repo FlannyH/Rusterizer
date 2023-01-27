@@ -9,11 +9,11 @@ use gltf::{buffer::Data, iter::Nodes, Document};
 use crate::{structs::Vertex, texture::Texture};
 
 pub struct Mesh {
-    verts: Vec<Vertex>,
+    pub verts: Vec<Vertex>,
 }
 
 pub struct Model {
-    meshes: HashMap<u32, Mesh> // Where the u32 is the material id
+    pub meshes: HashMap<u32, Mesh>, // Where the u32 is the material id
 }
 
 fn create_vertex_array(
@@ -143,36 +143,42 @@ fn traverse_nodes(
     local_transform: Mat4,
     primitives_processed: &mut HashMap<u32, Mesh>,
 ) {
-        println!("\t\t\t{}: {}", node.index(), node.name().unwrap());
+    println!("\t\t\t{}: {}", node.index(), node.name().unwrap());
 
-        // Convert matrix in GLTF model to a Mat4. If it does not exist, set it to identity
-        let local_matrix = Mat4::IDENTITY;
-        for y in 0..node.transform().matrix().len() {
-            for x in 0..node.transform().matrix()[y].len() {
-                local_matrix.row(x)[y] = node.transform().matrix()[x][y];
-            }
+    // Convert matrix in GLTF model to a Mat4. If it does not exist, set it to identity
+    let local_matrix = Mat4::IDENTITY;
+    for y in 0..node.transform().matrix().len() {
+        for x in 0..node.transform().matrix()[y].len() {
+            local_matrix.row(x)[y] = node.transform().matrix()[x][y];
         }
+    }
 
-        // If it has a mesh, process it
-        if node.mesh().is_some() {
-            // Get mesh
-            let mesh = node.mesh().unwrap();
-            let primitives = mesh.primitives();
+    // If it has a mesh, process it
+    if node.mesh().is_some() {
+        // Get mesh
+        let mesh = node.mesh().unwrap();
+        let primitives = mesh.primitives();
 
-            for primitive in primitives {
-                println!("Creating vertex array for mesh {}", node.name().unwrap());
-                let mesh_buffer_data =
-                    create_vertex_array(&primitive, gltf_document, &mesh_data, local_matrix);
-                let material = primitive.material().index().unwrap_or(usize::MAX) as u32;
-                primitives_processed.insert(material, mesh_buffer_data);
-            }
+        for primitive in primitives {
+            println!("Creating vertex array for mesh {}", node.name().unwrap());
+            let mesh_buffer_data =
+                create_vertex_array(&primitive, gltf_document, &mesh_data, local_matrix);
+            let material = primitive.material().index().unwrap_or(usize::MAX) as u32;
+            primitives_processed.insert(material, mesh_buffer_data);
         }
+    }
 
-        // If it has children, process those
-        if node.children().len() == 0 {
-            for child in node.children() {
-                traverse_nodes(&child, gltf_document, mesh_data, local_transform, primitives_processed);
-            }
+    // If it has children, process those
+    if node.children().len() == 0 {
+        for child in node.children() {
+            traverse_nodes(
+                &child,
+                gltf_document,
+                mesh_data,
+                local_transform,
+                primitives_processed,
+            );
+        }
     }
 }
 
@@ -205,6 +211,8 @@ impl Model {
     }
 
     pub(crate) fn new() -> Model {
-        Model { meshes: HashMap::new() }
+        Model {
+            meshes: HashMap::new(),
+        }
     }
 }
