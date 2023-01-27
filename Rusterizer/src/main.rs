@@ -16,8 +16,8 @@ use rendering::Renderer;
 use structs::{Transform, Vertex};
 use texture::Texture;
 
-const WIDTH: usize = 640;
-const HEIGHT: usize = 360;
+const WIDTH: usize = 1280;
+const HEIGHT: usize = 720;
 
 fn main() {
     let mut renderer = Renderer {
@@ -71,10 +71,16 @@ fn main() {
 
     // Load mesh
     let mut model = Model::new();
-    model.from_gltf(Path::new("D:/Library/Documents/monkey.gltf"));
+    model.from_gltf(Path::new("D:/Library/Documents/GitHub/FlanRenderer/FlanRenderer/x64/Release/Assets/Models/suzanne.gltf"));
 
     let mut camera_transform = Transform {
-        translation: glam::vec3(0.0, 0.0, -1.0),
+        translation: glam::vec3(0.0, 0.0, 3.0),
+        rotation: glam::Quat::from_euler(glam::EulerRot::ZYX, 0.0, 0.0, 0.0),
+        scale: glam::vec3(1.0, 1.0, 1.0),
+    };
+
+    let mut model_transform = Transform {
+        translation: glam::vec3(0.0, 0.0, 0.0),
         rotation: glam::Quat::from_euler(glam::EulerRot::ZYX, 0.0, 0.0, 0.0),
         scale: glam::vec3(1.0, 1.0, 1.0),
     };
@@ -84,35 +90,36 @@ fn main() {
         // Clear screen
         for i in 0..color_buffer.len() {
             color_buffer[i] = 0;
-            depth_buffer[i] = INFINITY;
+            depth_buffer[i] = 0.0;
         }
+
+        let perspective_matrix =
+            glam::Mat4::perspective_rh(0.4 * PI, WIDTH as f32 / HEIGHT as f32, 0.1, 100.0);
 
         // Set 3rd vertex to mouse position
         (v2.position.x, v2.position.y) = window.get_mouse_pos(minifb::MouseMode::Clamp).unwrap();
-        camera_transform.translation.z += 0.1;
-        camera_transform.rotation *= glam::Quat::from_euler(glam::EulerRot::ZYX, 0.0, 0.01, 0.0);
-        renderer.set_view_matrix(camera_transform.matrix());
-        renderer.set_projection_matrix(glam::Mat4::perspective_rh(
-            0.5 * PI,
-            WIDTH as f32 / HEIGHT as f32,
-            0.1,
-            1000.0,
-        ));
+        //camera_transform.translation.z += 1.;
+        model_transform.rotation *= glam::Quat::from_euler(glam::EulerRot::ZYX, 0.0, 0.01, 0.0);
+        renderer.set_view_matrix(camera_transform.view_matrix());
+        renderer.set_projection_matrix(perspective_matrix);
+
+        //model_transform.translation.x += 0.001;
 
         // Draw the triangle
         renderer.draw_model(
             &model,
+            &model_transform,
             &mut color_buffer,
             &mut depth_buffer,
             WIDTH,
             HEIGHT,
-            Some(&tex),
+            None,
         );
         //draw_triangle_filled(v0, v2, v1, &mut buffer, WIDTH, Some(&tex));
         //draw_triangle_wireframe(v0, v2, v1, &mut buffer, WIDTH, HEIGHT);cargo fmt
         //draw_triangle_filled(v0, v3, v2, &mut buffer, WIDTH, Some(&tex));
         //draw_triangle_wireframe(v0, v3, v2, &mut buffer, WIDTH, HEIGHT);
-        
+
         window
             .update_with_buffer(&color_buffer, WIDTH, HEIGHT)
             .unwrap();
