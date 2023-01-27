@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 glam = "0.22.0"
+gltf = {version="1.0.0", features = ["import", "names"] }
 minifb = "0.23.0"
 stb_image = "0.2.4"
