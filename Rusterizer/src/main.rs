@@ -113,7 +113,7 @@ fn main() {
             &mut depth_buffer,
             WIDTH,
             HEIGHT,
-            None,
+            Some(&tex),
         );
         //draw_triangle_filled(v0, v2, v1, &mut buffer, WIDTH, Some(&tex));
         //draw_triangle_wireframe(v0, v2, v1, &mut buffer, WIDTH, HEIGHT);cargo fmt

@@ -16,18 +16,70 @@ pub struct Model {
     pub meshes: HashMap<u32, Mesh>, // Where the u32 is the material id
 }
 
+// So what this function needs to do: &[u8] -(reinterpret)> &[SrcCompType] -(convert)> &[DstCompType]
+fn reinterpret_then_convert<SrcCompType, DstCompType>(
+    input_buffer: &[u8],
+) -> Vec<DstCompType>
+where 
+DstCompType: From<SrcCompType>, 
+SrcCompType: Copy{
+    // &[u8] -> &[SrcCompType]
+    let input_ptr = input_buffer.as_ptr();
+    let src_comp_buffer: &[SrcCompType] = unsafe {
+        std::slice::from_raw_parts(
+            std::mem::transmute(input_ptr),
+            input_buffer.len() / std::mem::size_of::<SrcCompType>(),
+        )
+    };
+
+    // &[SrcCompType] -> Vec<DstCompType>
+    let mut dst_comp_vec = Vec::<DstCompType>::new();
+    for item in src_comp_buffer {
+        dst_comp_vec.push(DstCompType::from(*item));
+    };    
+
+    // Return
+    dst_comp_vec
+}
+
+fn convert_glfw_buffer_to_f32(
+    input_buffer: &[u8],
+    accessor: &gltf::Accessor,
+) -> Vec<f32> {
+    // Convert based on data type
+    // First we make a f64 vector (this way we can do fancy generics magic and still convert u32 to f32)
+    let values64 = match accessor.data_type() {
+        gltf::accessor::DataType::I8 => reinterpret_then_convert::<i8, f64>(input_buffer),
+        gltf::accessor::DataType::U8 => reinterpret_then_convert::<u8, f64>(input_buffer),
+        gltf::accessor::DataType::I16 => reinterpret_then_convert::<i16, f64>(input_buffer),
+        gltf::accessor::DataType::U16 => reinterpret_then_convert::<u16, f64>(input_buffer),
+        gltf::accessor::DataType::U32 => reinterpret_then_convert::<u32, f64>(input_buffer),
+        gltf::accessor::DataType::F32 => reinterpret_then_convert::<f32, f64>(input_buffer),
+    };
+
+    // Then we convert that to a f32 vector - this feels cursed as heck but let's ignore that, it'll be fine!
+    let mut values32 = Vec::<f32>::new();
+    values32.resize(values64.len(), 0.0);
+    for i in 0..values32.len() {
+        values32[i] = values64[i] as f32;
+    }
+
+    // Return
+    values32
+}
+
 fn create_vertex_array(
     primitive: &gltf::Primitive,
     gltf_document: &Document,
     mesh_data: &Vec<Data>,
     local_matrix: Mat4,
 ) -> Mesh {
-    let mut position_vec: &[Vec3] = &[];
-    let mut normal_vec: &[Vec3] = &[];
-    let mut tangent_vec: &[Vec4] = &[];
-    let mut colour_vec: &[Vec4] = &[];
-    let mut texcoord_vec: &[Vec2] = &[];
-    let mut indices: &[u16] = &[];
+    let mut position_vec = Vec::<Vec3>::new();
+    let mut normal_vec = Vec::<Vec3>::new();
+    let mut tangent_vec = Vec::<Vec4>::new();
+    let mut colour_vec = Vec::<Vec4>::new();
+    let mut texcoord_vec = Vec::<Vec2>::new();
+    let mut indices = Vec::<u16>::new();
 
     // Loop over all the primitive attributes
     for (name, accessor) in primitive.attributes() {
@@ -50,32 +102,45 @@ fn create_vertex_array(
             accessor.size(),
             accessor.count()
         );
-        unsafe {
             // todo: make this less hardcoded in terms of type
             match name.to_string().as_str() {
                 "POSITION" => {
-                    position_vec = std::mem::transmute(buffer_slice);
-                    position_vec = &position_vec[0..accessor.count()];
+                    let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                    for i in (0..accessor.count()*3).step_by(3) {
+                        let slice = &values[i..i+3];
+                        position_vec.push(Vec3::from_slice(slice));
+                    }
                 }
                 "NORMAL" => {
-                    normal_vec = std::mem::transmute(buffer_slice);
-                    normal_vec = &normal_vec[0..accessor.count()];
+                    let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                    for i in (0..accessor.count()*3).step_by(3) {
+                        let slice = &values[i..i+3];
+                        normal_vec.push(Vec3::from_slice(slice));
+                    }
                 }
                 "TANGENT" => {
-                    tangent_vec = std::mem::transmute(buffer_slice);
-                    tangent_vec = &tangent_vec[0..accessor.count()];
+                    let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                    for i in (0..accessor.count()*4).step_by(4) {
+                        let slice = &values[i..i+4];
+                        tangent_vec.push(Vec4::from_slice(slice));
+                    }
                 }
-
                 "TEXCOORD_0" => {
-                    texcoord_vec = std::mem::transmute(buffer_slice);
-                    texcoord_vec = &texcoord_vec[0..accessor.count()];
+                    let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                    for i in (0..accessor.count()*2).step_by(2) {
+                        let slice = &values[i..i+2];
+                        texcoord_vec.push(Vec2::from_slice(slice));
+                    }
                 }
                 "COLOR_0" => {
-                    colour_vec = std::mem::transmute(buffer_slice);
-                    colour_vec = &colour_vec[0..accessor.count()];
+                    let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                    for i in (0..accessor.count()*4).step_by(4) {
+                        let slice = &values[i..i+4];
+                        colour_vec.push(Vec4::from_slice(slice));
+                    }
                 }
                 _ => {}
-            }
+            
         }
     }
 
@@ -95,10 +160,11 @@ fn create_vertex_array(
         // Find location in buffer
         let buffer_base = &mesh_data[buffer_index].0;
         let buffer_slice = buffer_base.get(buffer_offset..buffer_end).unwrap();
-        unsafe {
-            // todo: make this less hardcoded in terms of type
-            indices = std::mem::transmute(buffer_slice);
-            indices = &indices[0..accessor.count()];
+
+        // Convert from raw buffer to f32 vec - this is incredibly cursed but it'll have to do
+        let indices_f32 = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+        for index in indices_f32 {
+            indices.push(index as u16);
         }
     }
 
@@ -109,24 +175,24 @@ fn create_vertex_array(
             position: Vec3::new(0., 0., 0.),
             normal: Vec3::new(0., 0., 0.),
             tangent: Vec3::new(0., 0., 0.),
-            colour: Vec3::new(0., 0., 0.),
+            colour: Vec3::new(1., 1., 1.),
             uv: Vec2::new(0., 0.),
         };
         if !position_vec.is_empty() {
-            let pos3 = position_vec[*index as usize];
+            let pos3 = position_vec[index as usize];
             vertex.position = local_matrix.transform_vector3(pos3);
         }
         if !normal_vec.is_empty() {
-            vertex.normal = local_matrix.transform_vector3(normal_vec[*index as usize]);
+            vertex.normal = local_matrix.transform_vector3(normal_vec[index as usize]);
         }
         if !tangent_vec.is_empty() {
-            vertex.tangent = local_matrix.transform_vector3(tangent_vec[*index as usize].xyz());
+            vertex.tangent = local_matrix.transform_vector3(tangent_vec[index as usize].xyz());
         }
-        if !tangent_vec.is_empty() {
-            vertex.uv = texcoord_vec[*index as usize];
+        if !texcoord_vec.is_empty() {
+            vertex.uv = texcoord_vec[index as usize];
         }
         if !colour_vec.is_empty() {
-            vertex.colour.x = f32::powf(colour_vec[*index as usize].x as f32, 1.0 / 2.2);
+            vertex.colour.x = f32::powf(colour_vec[index as usize].x as f32, 1.0 / 2.2);
             if vertex.colour.x > 1.0 {
                 vertex.colour.x = 1.0
             }

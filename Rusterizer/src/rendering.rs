@@ -155,8 +155,12 @@ impl Renderer {
             (v0.position.y.max(v1.position.y).max(v2.position.y) as usize).clamp(0, height - 1);
 
         // Don't render off screen triangles
-        if (y_max as i32 - y_min as i32) <= 0 {return;}
-        if (x_max as i32 - x_min as i32) <= 0 {return;}
+        if (y_max as i32 - y_min as i32) <= 0 {
+            return;
+        }
+        if (x_max as i32 - x_min as i32) <= 0 {
+            return;
+        }
 
         for y in y_min..=y_max {
             for x in x_min..=x_max {
@@ -194,9 +198,19 @@ impl Renderer {
                     let normal = lerp_bary(&bary, &v0.normal, &v1.normal, &v2.normal);
                     let tangent = lerp_bary(&bary, &v0.tangent, &v1.tangent, &v2.tangent);
                     let mut colour = lerp_bary(&bary, &v0.colour, &v1.colour, &v2.colour);
-                    colour.x = normal.x * 0.5 + 0.5;
-                    colour.y = normal.y * 0.5 + 0.5;
-                    colour.z = normal.z * 0.5 + 0.5;
+                    if false {
+                        colour.x = normal.x * 0.5 + 0.5;
+                        colour.y = normal.y * 0.5 + 0.5;
+                        colour.z = normal.z * 0.5 + 0.5;
+                    }
+                    if false {
+                        colour.x = 1.0;
+                        colour.y = 1.0;
+                        colour.z = 1.0;
+                    }
+                    if true { // Very basic lighting NdotL
+                        colour *= normal.dot(glam::vec3(1.0, 0.5, 0.0).normalize()) * 0.5 + 0.5;
+                    }
                     if let Some(tex) = texture {
                         let texture_sample = tex.argb_at_uv(tex_coords.x, tex_coords.y);
                         colour.x *= ((texture_sample) & 0xFF) as f32 / 255.0;
@@ -215,8 +229,7 @@ impl Renderer {
         }
     }
 
-    fn vertex_shader(&self, vert: &Vertex,
-        model_matrix: &Mat4) -> FragIn {
+    fn vertex_shader(&self, vert: &Vertex, model_matrix: &Mat4) -> FragIn {
         let mut v = glam::vec4(vert.position.x, vert.position.y, vert.position.z, 1.0);
         v = model_matrix.mul_vec4(v);
         v = self.view_matrix.mul_vec4(v);
@@ -277,7 +290,15 @@ impl Renderer {
         texture: Option<&Texture>,
     ) {
         for (tex_id, mesh) in &model.meshes {
-            self.draw_mesh(mesh, model_matrix, colour_buffer, depth_buffer, width, height, texture);
+            self.draw_mesh(
+                mesh,
+                model_matrix,
+                colour_buffer,
+                depth_buffer,
+                width,
+                height,
+                texture,
+            );
         }
     }
 
