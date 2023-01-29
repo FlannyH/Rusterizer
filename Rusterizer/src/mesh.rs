@@ -222,10 +222,17 @@ fn traverse_nodes(
 
         for primitive in primitives {
             println!("Creating vertex array for mesh {}", node.name().unwrap());
-            let mesh_buffer_data =
+            let mut mesh_buffer_data =
                 create_vertex_array(&primitive, gltf_document, &mesh_data, local_matrix);
             let material = String::from(primitive.material().name().unwrap_or("None"));
-            primitives_processed.insert(material, mesh_buffer_data);
+            #[allow(clippy::map_entry)] // This was really annoying and made the code less readable
+            if primitives_processed.contains_key(&material) {
+                let mesh: &mut Mesh = primitives_processed.get_mut(&material).unwrap();
+                mesh.verts.append(&mut mesh_buffer_data.verts);
+            }
+            else {
+                primitives_processed.insert(material, mesh_buffer_data);
+            }
         }
     }
 

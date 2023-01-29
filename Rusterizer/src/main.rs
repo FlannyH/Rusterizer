@@ -45,7 +45,7 @@ fn main() {
 
     // Load mesh
     let mut model = Model::new();
-    model.create_from_gltf(Path::new("./assets/spyro.gltf"), &mut renderer);
+    model.create_from_gltf(Path::new("./assets/summerforest.gltf"), &mut renderer);
 
     let mut model_transform = Transform {
         translation: glam::vec3(0.0, 0.0, 0.0),
@@ -60,7 +60,7 @@ fn main() {
             rotation: glam::quat(0.0, 0.0, 0.0, 1.0),
             scale: glam::vec3(1.0, 1.0, 1.0),
         },
-        1.0,
+        5.0,
         0.005,
     );
 
@@ -76,7 +76,7 @@ fn main() {
             glam::Mat4::perspective_rh(0.4 * PI, WIDTH as f32 / HEIGHT as f32, 0.1, 100.0);
 
         camera.update(&window, 0.01666);
-        model_transform.rotation *= glam::Quat::from_euler(glam::EulerRot::ZYX, 0.0, 0.01, 0.0);
+        //model_transform.rotation *= glam::Quat::from_euler(glam::EulerRot::ZYX, 0.0, 0.01, 0.0);
         renderer.set_view_matrix(camera.transform.view_matrix());
         renderer.set_projection_matrix(perspective_matrix);
 
