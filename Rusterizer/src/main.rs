@@ -1,3 +1,4 @@
+mod camera;
 mod helpers;
 mod mesh;
 mod rendering;
@@ -10,9 +11,10 @@ use std::{
     path::Path,
 };
 
+use camera::Camera;
 use glam::{Mat4, Vec2, Vec3};
 use mesh::{Mesh, Model};
-use minifb::{Key, Window, WindowOptions};
+use minifb::{Key, MouseMode, Window, WindowOptions};
 use rendering::Renderer;
 use structs::{Transform, Vertex};
 use texture::Texture;
@@ -45,17 +47,22 @@ fn main() {
     let mut model = Model::new();
     model.create_from_gltf(Path::new("./assets/spyro.gltf"), &mut renderer);
 
-    let mut camera_transform = Transform {
-        translation: glam::vec3(0.0, 0.0, 3.0),
-        rotation: glam::Quat::from_euler(glam::EulerRot::ZYX, 0.0, 0.0, 0.0),
-        scale: glam::vec3(1.0, 1.0, 1.0),
-    };
-
     let mut model_transform = Transform {
         translation: glam::vec3(0.0, 0.0, 0.0),
         rotation: glam::Quat::from_euler(glam::EulerRot::ZYX, 0.0, 0.0, 0.0),
         scale: glam::vec3(1.0, 1.0, 1.0),
     };
+
+    let mut camera = Camera::new(
+        &window,
+        Transform {
+            translation: glam::vec3(0.0, 0.0, 3.0),
+            rotation: glam::quat(0.0, 0.0, 0.0, 1.0),
+            scale: glam::vec3(1.0, 1.0, 1.0),
+        },
+        1.0,
+        0.005,
+    );
 
     // Main loop
     while window.is_open() && !window.is_key_down(Key::Escape) {
@@ -68,9 +75,9 @@ fn main() {
         let perspective_matrix =
             glam::Mat4::perspective_rh(0.4 * PI, WIDTH as f32 / HEIGHT as f32, 0.1, 100.0);
 
-        //camera_transform.translation.z += 1.;
+        camera.update(&window, 0.01666);
         model_transform.rotation *= glam::Quat::from_euler(glam::EulerRot::ZYX, 0.0, 0.01, 0.0);
-        renderer.set_view_matrix(camera_transform.view_matrix());
+        renderer.set_view_matrix(camera.transform.view_matrix());
         renderer.set_projection_matrix(perspective_matrix);
 
         //model_transform.translation.x += 0.001;
@@ -92,6 +99,5 @@ fn main() {
         window
             .update_with_buffer(&color_buffer, WIDTH, HEIGHT)
             .unwrap();
-        println!("frame rendered");
     }
 }

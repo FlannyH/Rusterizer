@@ -39,7 +39,7 @@ impl Transform {
         Mat4::look_at_rh(
             self.translation,
             self.translation + self.forward(),
-            self.up(),
+            glam::vec3(0.0, 1.0, 0.0),
         )
     }
     pub fn trans_matrix(&self) -> Mat4 {
