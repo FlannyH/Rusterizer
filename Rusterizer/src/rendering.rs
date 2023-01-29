@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::ops::Add;
 use std::ops::Mul;
 
@@ -16,6 +17,7 @@ use crate::texture::Texture;
 pub struct Renderer {
     pub projection_matrix: Mat4,
     pub view_matrix: Mat4,
+    pub textures: HashMap<String, Texture>,
 }
 
 fn lerp_bary<T: Mul<f32, Output = T> + Add<T, Output = T> + Copy>(
@@ -208,7 +210,8 @@ impl Renderer {
                         colour.y = 1.0;
                         colour.z = 1.0;
                     }
-                    if true { // Very basic lighting NdotL
+                    if true {
+                        // Very basic lighting NdotL
                         colour *= normal.dot(glam::vec3(1.0, 0.5, 0.0).normalize()) * 0.5 + 0.5;
                     }
                     if let Some(tex) = texture {
@@ -287,7 +290,6 @@ impl Renderer {
         depth_buffer: &mut [f32],
         width: usize,
         height: usize,
-        texture: Option<&Texture>,
     ) {
         for (tex_id, mesh) in &model.meshes {
             self.draw_mesh(
@@ -297,7 +299,10 @@ impl Renderer {
                 depth_buffer,
                 width,
                 height,
-                texture,
+                match tex_id.as_str() {
+                    "None" => None,
+                    _ => Some(&self.textures[tex_id]),
+                },
             );
         }
     }

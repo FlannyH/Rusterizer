@@ -1,11 +1,11 @@
-use std::borrow::BorrowMut;
-use std::{collections::HashMap, hash::Hash, path::Path, rc::Rc};
+use std::{collections::HashMap, path::Path};
 
 use glam::Vec4Swizzles;
 use glam::{Mat4, Vec2, Vec3, Vec4};
-use gltf::Material;
-use gltf::{buffer::Data, iter::Nodes, Document};
 
+use gltf::{buffer::Data, Document};
+
+use crate::rendering::Renderer;
 use crate::{structs::Vertex, texture::Texture};
 
 pub struct Mesh {
@@ -13,16 +13,15 @@ pub struct Mesh {
 }
 
 pub struct Model {
-    pub meshes: HashMap<u32, Mesh>, // Where the u32 is the material id
+    pub meshes: HashMap<String, Mesh>, // Where the u32 is the material id
 }
 
 // So what this function needs to do: &[u8] -(reinterpret)> &[SrcCompType] -(convert)> &[DstCompType]
-fn reinterpret_then_convert<SrcCompType, DstCompType>(
-    input_buffer: &[u8],
-) -> Vec<DstCompType>
-where 
-DstCompType: From<SrcCompType>, 
-SrcCompType: Copy{
+fn reinterpret_then_convert<SrcCompType, DstCompType>(input_buffer: &[u8]) -> Vec<DstCompType>
+where
+    DstCompType: From<SrcCompType>,
+    SrcCompType: Copy,
+{
     // &[u8] -> &[SrcCompType]
     let input_ptr = input_buffer.as_ptr();
     let src_comp_buffer: &[SrcCompType] = unsafe {
@@ -36,16 +35,13 @@ SrcCompType: Copy{
     let mut dst_comp_vec = Vec::<DstCompType>::new();
     for item in src_comp_buffer {
         dst_comp_vec.push(DstCompType::from(*item));
-    };    
+    }
 
     // Return
     dst_comp_vec
 }
 
-fn convert_glfw_buffer_to_f32(
-    input_buffer: &[u8],
-    accessor: &gltf::Accessor,
-) -> Vec<f32> {
+fn convert_glfw_buffer_to_f32(input_buffer: &[u8], accessor: &gltf::Accessor) -> Vec<f32> {
     // Convert based on data type
     // First we make a f64 vector (this way we can do fancy generics magic and still convert u32 to f32)
     let values64 = match accessor.data_type() {
@@ -102,45 +98,44 @@ fn create_vertex_array(
             accessor.size(),
             accessor.count()
         );
-            // todo: make this less hardcoded in terms of type
-            match name.to_string().as_str() {
-                "POSITION" => {
-                    let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
-                    for i in (0..accessor.count()*3).step_by(3) {
-                        let slice = &values[i..i+3];
-                        position_vec.push(Vec3::from_slice(slice));
-                    }
+        // todo: make this less hardcoded in terms of type
+        match name.to_string().as_str() {
+            "POSITION" => {
+                let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                for i in (0..accessor.count() * 3).step_by(3) {
+                    let slice = &values[i..i + 3];
+                    position_vec.push(Vec3::from_slice(slice));
                 }
-                "NORMAL" => {
-                    let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
-                    for i in (0..accessor.count()*3).step_by(3) {
-                        let slice = &values[i..i+3];
-                        normal_vec.push(Vec3::from_slice(slice));
-                    }
+            }
+            "NORMAL" => {
+                let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                for i in (0..accessor.count() * 3).step_by(3) {
+                    let slice = &values[i..i + 3];
+                    normal_vec.push(Vec3::from_slice(slice));
                 }
-                "TANGENT" => {
-                    let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
-                    for i in (0..accessor.count()*4).step_by(4) {
-                        let slice = &values[i..i+4];
-                        tangent_vec.push(Vec4::from_slice(slice));
-                    }
+            }
+            "TANGENT" => {
+                let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                for i in (0..accessor.count() * 4).step_by(4) {
+                    let slice = &values[i..i + 4];
+                    tangent_vec.push(Vec4::from_slice(slice));
                 }
-                "TEXCOORD_0" => {
-                    let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
-                    for i in (0..accessor.count()*2).step_by(2) {
-                        let slice = &values[i..i+2];
-                        texcoord_vec.push(Vec2::from_slice(slice));
-                    }
+            }
+            "TEXCOORD_0" => {
+                let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                for i in (0..accessor.count() * 2).step_by(2) {
+                    let slice = &values[i..i + 2];
+                    texcoord_vec.push(Vec2::from_slice(slice));
                 }
-                "COLOR_0" => {
-                    let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
-                    for i in (0..accessor.count()*4).step_by(4) {
-                        let slice = &values[i..i+4];
-                        colour_vec.push(Vec4::from_slice(slice));
-                    }
+            }
+            "COLOR_0" => {
+                let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                for i in (0..accessor.count() * 4).step_by(4) {
+                    let slice = &values[i..i + 4];
+                    colour_vec.push(Vec4::from_slice(slice));
                 }
-                _ => {}
-            
+            }
+            _ => {}
         }
     }
 
@@ -192,7 +187,7 @@ fn create_vertex_array(
             vertex.uv = texcoord_vec[index as usize];
         }
         if !colour_vec.is_empty() {
-            vertex.colour.x = f32::powf(colour_vec[index as usize].x as f32, 1.0 / 2.2);
+            vertex.colour.x = f32::powf(colour_vec[index as usize].x, 1.0 / 2.2);
             if vertex.colour.x > 1.0 {
                 vertex.colour.x = 1.0
             }
@@ -207,7 +202,7 @@ fn traverse_nodes(
     gltf_document: &Document,
     mesh_data: &Vec<Data>,
     local_transform: Mat4,
-    primitives_processed: &mut HashMap<u32, Mesh>,
+    primitives_processed: &mut HashMap<String, Mesh>,
 ) {
     println!("\t\t\t{}: {}", node.index(), node.name().unwrap());
 
@@ -229,7 +224,7 @@ fn traverse_nodes(
             println!("Creating vertex array for mesh {}", node.name().unwrap());
             let mesh_buffer_data =
                 create_vertex_array(&primitive, gltf_document, &mesh_data, local_matrix);
-            let material = primitive.material().index().unwrap_or(usize::MAX) as u32;
+            let material = String::from(primitive.material().name().unwrap_or("None"));
             primitives_processed.insert(material, mesh_buffer_data);
         }
     }
@@ -249,7 +244,7 @@ fn traverse_nodes(
 }
 
 impl Model {
-    pub(crate) fn from_gltf(&mut self, path: &Path) {
+    pub(crate) fn create_from_gltf(&mut self, path: &Path, renderer: &mut Renderer) {
         // Load GLTF from file
         let gltf_file = gltf::import(path);
         let (gltf_document, mesh_data, image_data) = gltf_file.unwrap();
@@ -273,7 +268,38 @@ impl Model {
             }
             println!("test");
         }
-        return;
+
+        // Get all the textures from the GLTF
+        for material in gltf_document.materials() {
+            let gltf_tex = material
+                .pbr_metallic_roughness()
+                .base_color_texture()
+                .unwrap()
+                .texture()
+                .source()
+                .index();
+            let image = &image_data[gltf_tex];
+            let tex = Texture {
+                width: image.width as usize,
+                height: image.height as usize,
+                depth: 4,
+                data: {
+                    let mut data = Vec::<u32>::new();
+                    for i in (0..image.pixels.len()).step_by(4) {
+                        data.push(
+                            (image.pixels[i] as u32)
+                                + ((image.pixels[i + 1] as u32) << 8)
+                                + ((image.pixels[i + 2] as u32) << 16)
+                                + ((image.pixels[i + 3] as u32) << 24),
+                        );
+                    }
+                    data
+                },
+            };
+            renderer
+                .textures
+                .insert(material.name().unwrap().to_string(), tex);
+        }
     }
 
     pub(crate) fn new() -> Model {
