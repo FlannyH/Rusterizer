@@ -41,7 +41,7 @@ where
     dst_comp_vec
 }
 
-fn convert_glfw_buffer_to_f32(input_buffer: &[u8], accessor: &gltf::Accessor) -> Vec<f32> {
+fn convert_gltf_buffer_to_f32(input_buffer: &[u8], accessor: &gltf::Accessor) -> Vec<f32> {
     // Convert based on data type
     // First we make a f64 vector (this way we can do fancy generics magic and still convert u32 to f32)
     let values64 = match accessor.data_type() {
@@ -101,35 +101,35 @@ fn create_vertex_array(
         // todo: make this less hardcoded in terms of type
         match name.to_string().as_str() {
             "POSITION" => {
-                let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                let values = convert_gltf_buffer_to_f32(buffer_slice, &accessor);
                 for i in (0..accessor.count() * 3).step_by(3) {
                     let slice = &values[i..i + 3];
                     position_vec.push(Vec3::from_slice(slice));
                 }
             }
             "NORMAL" => {
-                let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                let values = convert_gltf_buffer_to_f32(buffer_slice, &accessor);
                 for i in (0..accessor.count() * 3).step_by(3) {
                     let slice = &values[i..i + 3];
                     normal_vec.push(Vec3::from_slice(slice));
                 }
             }
             "TANGENT" => {
-                let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                let values = convert_gltf_buffer_to_f32(buffer_slice, &accessor);
                 for i in (0..accessor.count() * 4).step_by(4) {
                     let slice = &values[i..i + 4];
                     tangent_vec.push(Vec4::from_slice(slice));
                 }
             }
             "TEXCOORD_0" => {
-                let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                let values = convert_gltf_buffer_to_f32(buffer_slice, &accessor);
                 for i in (0..accessor.count() * 2).step_by(2) {
                     let slice = &values[i..i + 2];
                     texcoord_vec.push(Vec2::from_slice(slice));
                 }
             }
             "COLOR_0" => {
-                let values = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+                let values = convert_gltf_buffer_to_f32(buffer_slice, &accessor);
                 for i in (0..accessor.count() * 4).step_by(4) {
                     let slice = &values[i..i + 4];
                     colour_vec.push(Vec4::from_slice(slice));
@@ -157,7 +157,7 @@ fn create_vertex_array(
         let buffer_slice = buffer_base.get(buffer_offset..buffer_end).unwrap();
 
         // Convert from raw buffer to f32 vec - this is incredibly cursed but it'll have to do
-        let indices_f32 = convert_glfw_buffer_to_f32(buffer_slice, &accessor);
+        let indices_f32 = convert_gltf_buffer_to_f32(buffer_slice, &accessor);
         for index in indices_f32 {
             indices.push(index as u16);
         }

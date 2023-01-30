@@ -126,6 +126,7 @@ impl Renderer {
         );
     }
 
+    // From [-1.0, +1.0] -> [0, screen_width or screen_height]
     fn ndc_to_screen(v: FragIn, width: usize, height: usize) -> FragIn {
         let mut v_out = v;
         v_out.position.x = (v_out.position.x + 1.0) / 2.0 * width as f32;
