@@ -308,23 +308,8 @@ impl Model {
                 .source()
                 .index();
             let image = &image_data[gltf_tex];
-            let tex = Texture {
-                width: image.width as usize,
-                height: image.height as usize,
-                depth: 4,
-                data: {
-                    let mut data = Vec::<u32>::new();
-                    for i in (0..image.pixels.len()).step_by(4) {
-                        data.push(
-                            (image.pixels[i] as u32)
-                                + ((image.pixels[i + 1] as u32) << 8)
-                                + ((image.pixels[i + 2] as u32) << 16)
-                                + ((image.pixels[i + 3] as u32) << 24),
-                        );
-                    }
-                    data
-                },
-            };
+            let mut tex = Texture::load_texture_from_gltf_image(image);
+            tex.generate_mipmaps();
             renderer
                 .textures
                 .insert(material.name().unwrap().to_string(), tex);

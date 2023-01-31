@@ -60,7 +60,7 @@ impl Transform {
     }
     pub fn local_matrix(&self) -> Mat4 {
         Mat4::from_translation(self.translation)
-        * Mat4::from_quat(self.rotation)
-        * Mat4::from_scale(self.scale)
+            * Mat4::from_quat(self.rotation)
+            * Mat4::from_scale(self.scale)
     }
 }

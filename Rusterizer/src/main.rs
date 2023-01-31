@@ -45,7 +45,7 @@ fn main() {
 
     // Load mesh
     let mut model = Model::new();
-    model.create_from_gltf(Path::new("./assets/hierarchy.gltf"), &mut renderer);
+    model.create_from_gltf(Path::new("./assets/summerforest.gltf"), &mut renderer);
 
     let mut model_transform = Transform {
         translation: glam::vec3(0.0, 0.0, 0.0),
