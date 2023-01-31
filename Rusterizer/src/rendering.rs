@@ -216,7 +216,14 @@ impl Renderer {
                         colour *= normal.dot(glam::vec3(1.0, 0.5, 0.0).normalize()) * 0.5 + 0.5;
                     }
                     if let Some(tex) = texture {
-                        let texture_sample = tex.argb_at_uv(tex_coords.x, tex_coords.y, 3);
+                        // Select mip map level
+                        let mut mip_level =
+                            (area / new_depth).log2() - (tex.width.max(tex.height) as f32).log2() + 16.0;
+                        mip_level = mip_level.clamp(0.0, (tex.mipmap_offsets.len() - 2) as f32);
+
+                        // Sample texture
+                        let texture_sample =
+                            tex.argb_at_uv(tex_coords.x, tex_coords.y, mip_level as usize);
                         colour.x *= ((texture_sample) & 0xFF) as f32 / 255.0;
                         colour.y *= ((texture_sample >> 8) & 0xFF) as f32 / 255.0;
                         colour.z *= ((texture_sample >> 16) & 0xFF) as f32 / 255.0;
