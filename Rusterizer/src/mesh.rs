@@ -1,3 +1,4 @@
+use std::ops::Mul;
 use std::{collections::HashMap, path::Path};
 
 use glam::Vec4Swizzles;
@@ -6,6 +7,7 @@ use glam::{Mat4, Vec2, Vec3, Vec4};
 use gltf::{buffer::Data, Document};
 
 use crate::rendering::Renderer;
+use crate::structs::Transform;
 use crate::{structs::Vertex, texture::Texture};
 
 pub struct Mesh {
@@ -67,7 +69,7 @@ fn convert_gltf_buffer_to_f32(input_buffer: &[u8], accessor: &gltf::Accessor) ->
 fn create_vertex_array(
     primitive: &gltf::Primitive,
     gltf_document: &Document,
-    mesh_data: &Vec<Data>,
+    mesh_data: &[Data],
     local_matrix: Mat4,
 ) -> Mesh {
     let mut position_vec = Vec::<Vec3>::new();
@@ -175,7 +177,7 @@ fn create_vertex_array(
         };
         if !position_vec.is_empty() {
             let pos3 = position_vec[index as usize];
-            vertex.position = local_matrix.transform_vector3(pos3);
+            vertex.position = (local_matrix * pos3.extend(1.0)).xyz();
         }
         if !normal_vec.is_empty() {
             vertex.normal = local_matrix.transform_vector3(normal_vec[index as usize]);
@@ -190,6 +192,14 @@ fn create_vertex_array(
             vertex.colour.x = f32::powf(colour_vec[index as usize].x, 1.0 / 2.2);
             if vertex.colour.x > 1.0 {
                 vertex.colour.x = 1.0
+            }
+            vertex.colour.y = f32::powf(colour_vec[index as usize].y, 1.0 / 2.2);
+            if vertex.colour.y > 1.0 {
+                vertex.colour.y = 1.0
+            }
+            vertex.colour.z = f32::powf(colour_vec[index as usize].z, 1.0 / 2.2);
+            if vertex.colour.z > 1.0 {
+                vertex.colour.z = 1.0
             }
         }
         mesh_out.verts.push(vertex);
@@ -206,24 +216,38 @@ fn traverse_nodes(
 ) {
     println!("\t\t\t{}: {}", node.index(), node.name().unwrap());
 
-    // Convert matrix in GLTF model to a Mat4. If it does not exist, set it to identity
-    let local_matrix = Mat4::IDENTITY;
-    for y in 0..node.transform().matrix().len() {
-        for x in 0..node.transform().matrix()[y].len() {
-            local_matrix.row(x)[y] = node.transform().matrix()[x][y];
-        }
-    }
+    // Convert translation in GLTF model to a Mat4.
+    let node_transform = Transform {
+        scale: glam::vec3(
+            node.transform().decomposed().2[0],
+            node.transform().decomposed().2[1],
+            node.transform().decomposed().2[2],
+        ),
+        rotation: glam::quat(
+            node.transform().decomposed().1[0],
+            node.transform().decomposed().1[1],
+            node.transform().decomposed().1[2],
+            node.transform().decomposed().1[3],
+        ),
+        translation: glam::vec3(
+            node.transform().decomposed().0[0],
+            node.transform().decomposed().0[1],
+            node.transform().decomposed().0[2],
+        ),
+    };
+
+    let new_local_transform = local_transform * node_transform.local_matrix();
 
     // If it has a mesh, process it
-    if node.mesh().is_some() {
+    let mesh = node.mesh();
+    if let Some(mesh) = mesh {
         // Get mesh
-        let mesh = node.mesh().unwrap();
         let primitives = mesh.primitives();
 
         for primitive in primitives {
             println!("Creating vertex array for mesh {}", node.name().unwrap());
             let mut mesh_buffer_data =
-                create_vertex_array(&primitive, gltf_document, &mesh_data, local_matrix);
+                create_vertex_array(&primitive, gltf_document, mesh_data, new_local_transform);
             let material = String::from(primitive.material().name().unwrap_or("None"));
             #[allow(clippy::map_entry)] // This was really annoying and made the code less readable
             if primitives_processed.contains_key(&material) {
@@ -236,16 +260,14 @@ fn traverse_nodes(
     }
 
     // If it has children, process those
-    if node.children().len() == 0 {
-        for child in node.children() {
-            traverse_nodes(
-                &child,
-                gltf_document,
-                mesh_data,
-                local_transform,
-                primitives_processed,
-            );
-        }
+    for child in node.children() {
+        traverse_nodes(
+            &child,
+            gltf_document,
+            mesh_data,
+            new_local_transform,
+            primitives_processed,
+        );
     }
 }
 
@@ -257,7 +279,8 @@ impl Model {
 
         // Loop over each scene
         println!("Scenes:");
-        for scene in gltf_document.scenes() {
+        let scene = gltf_document.default_scene();
+        if let Some(scene) = scene {
             // For each scene, get the nodes
             println!("\t{}: {}:", scene.index(), scene.name().unwrap());
 

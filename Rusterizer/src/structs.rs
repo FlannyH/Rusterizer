@@ -58,4 +58,9 @@ impl Transform {
     pub fn trans_matrix(&self) -> Mat4 {
         Mat4::from_scale_rotation_translation(self.scale, self.rotation, self.translation)
     }
+    pub fn local_matrix(&self) -> Mat4 {
+        Mat4::from_translation(self.translation)
+        * Mat4::from_quat(self.rotation)
+        * Mat4::from_scale(self.scale)
+    }
 }
