@@ -238,9 +238,6 @@ impl Renderer {
         v = model_matrix.mul_vec4(v);
         v = self.view_matrix.mul_vec4(v);
         v = self.projection_matrix.mul_vec4(v);
-        v.x /= v.w;
-        v.y /= v.w;
-        v.z /= v.w;
         FragIn {
             position: v,
             normal: vert.normal,
@@ -260,26 +257,143 @@ impl Renderer {
         height: usize,
         texture: Option<&Texture>,
     ) {
-        for i in 0..mesh.verts.len() / 3 {
+        for i in (0..mesh.verts.len()).step_by(3) {
             // Transform vertices
-            let mut v0 = mesh.verts[i * 3];
-            let mut v1 = mesh.verts[(i * 3) + 1];
-            let mut v2 = mesh.verts[(i * 3) + 2];
+            let mut v0 = mesh.verts[i];
+            let mut v1 = mesh.verts[i + 1];
+            let mut v2 = mesh.verts[i + 2];
             let v0 = self.vertex_shader(&v0, &model_matrix.trans_matrix());
             let v1 = self.vertex_shader(&v1, &model_matrix.trans_matrix());
             let v2 = self.vertex_shader(&v2, &model_matrix.trans_matrix());
 
+            // Create the vector for output triangles
+            let mut new_triangles = Vec::<FragIn>::new();
+
+            // Clip against near plane
+            {
+                // Check how many triangles are behind the near plane
+                let mut n_outside = 0;
+                if v0.position.z < 0.0 {
+                    n_outside += 1;
+                }
+                if v1.position.z < 0.0 {
+                    n_outside += 1;
+                }
+                if v2.position.z < 0.0 {
+                    n_outside += 1;
+                }
+
+                // n_outside = 0;
+
+                match n_outside {
+                    // If all vertices are in front of the near plane, don't do anything
+                    0 => {
+                        new_triangles.push(v0);
+                        new_triangles.push(v1);
+                        new_triangles.push(v2);
+                    }
+
+                    // If one vertex is behind the near plane, clip it, we should get 2 triangles back
+                    1 => {
+                        // Order vertices so that C is always the one behind the near clipping plane
+                        let a;
+                        let b;
+                        let c;
+                        if v0.position.z < 0.0 {
+                            a = v1;
+                            b = v2;
+                            c = v0;
+                        } else if v1.position.z < 0.0 {
+                            a = v2;
+                            b = v0;
+                            c = v1;
+                        } else
+                        // if v2.position.z < 0.0
+                        {
+                            a = v0;
+                            b = v1;
+                            c = v2;
+                        }
+
+                        // Calculate mid_AC and mid_BC
+                        let t_mid_ac = (0.0 - a.position.z) / (c.position.z - a.position.z);
+                        let t_mid_bc = (0.0 - b.position.z) / (c.position.z - b.position.z);
+                        let mid_ac = a.lerp(c, t_mid_ac);
+                        let mid_bc = b.lerp(c, t_mid_bc);
+
+                        // Triangle 1
+                        new_triangles.push(a);
+                        new_triangles.push(b);
+                        new_triangles.push(mid_ac);
+
+                        // Triangle 2
+                        new_triangles.push(mid_ac);
+                        new_triangles.push(b);
+                        new_triangles.push(mid_bc);
+                    }
+
+                    // If two vertices are behind the near clipping plane, we should get one triangle back
+                    2 => {
+                        // Order vertices so that A is always the one in front of the near clipping plane
+                        let a;
+                        let b;
+                        let c;
+                        if v0.position.z > 0.0 {
+                            a = v0;
+                            b = v1;
+                            c = v2;
+                        } else if v1.position.z > 0.0 {
+                            a = v1;
+                            b = v2;
+                            c = v0;
+                        } else
+                        // if v2.position.z > 0.0
+                        {
+                            a = v2;
+                            b = v0;
+                            c = v1;
+                        }
+
+                        // Calculate mid_AC and mid_BC
+                        let t_mid_ab = (0.0 - a.position.z) / (b.position.z - a.position.z);
+                        let t_mid_ac = (0.0 - a.position.z) / (c.position.z - a.position.z);
+                        let mid_ab = a.lerp(b, t_mid_ab);
+                        let mid_ac = a.lerp(c, t_mid_ac);
+
+                        // Return triangle
+                        new_triangles.push(a);
+                        new_triangles.push(mid_ab);
+                        new_triangles.push(mid_ac);
+                    }
+
+                    // Otherwise, don't render
+                    _ => {}
+                }
+            }
+
+            // Perform perspective divide
+            for item in &mut new_triangles {
+                item.position.x /= item.position.w;
+                item.position.y /= item.position.w;
+                item.position.z /= item.position.w;
+            }
+
             // Draw vertices
-            Self::draw_triangle_filled(
-                v0,
-                v1,
-                v2,
-                colour_buffer,
-                depth_buffer,
-                width,
-                height,
-                texture,
-            );
+            for i in (0..new_triangles.len()).step_by(3) {
+                if (new_triangles[i].position.w < 0.0) {
+                    println!("{}", new_triangles[i].position.w);
+                }
+                Self::draw_triangle_filled(
+                    new_triangles[i],
+                    new_triangles[i + 1],
+                    new_triangles[i + 2],
+                    colour_buffer,
+                    depth_buffer,
+                    width,
+                    height,
+                    texture,
+                );
+            }
         }
     }
 

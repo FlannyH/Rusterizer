@@ -229,8 +229,7 @@ fn traverse_nodes(
             if primitives_processed.contains_key(&material) {
                 let mesh: &mut Mesh = primitives_processed.get_mut(&material).unwrap();
                 mesh.verts.append(&mut mesh_buffer_data.verts);
-            }
-            else {
+            } else {
                 primitives_processed.insert(material, mesh_buffer_data);
             }
         }

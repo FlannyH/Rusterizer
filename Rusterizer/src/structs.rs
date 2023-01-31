@@ -9,6 +9,7 @@ pub struct Vertex {
     pub uv: Vec2,
 }
 
+#[derive(Debug, Copy, Clone)]
 pub struct FragIn {
     pub position: Vec4,
     pub normal: Vec3,
@@ -21,6 +22,18 @@ pub struct Transform {
     pub translation: Vec3,
     pub rotation: Quat,
     pub scale: Vec3,
+}
+
+impl FragIn {
+    pub fn lerp(&self, rhs: FragIn, t: f32) -> FragIn {
+        FragIn {
+            position: self.position.lerp(rhs.position, t),
+            normal: self.normal.lerp(rhs.normal, t),
+            tangent: self.tangent.lerp(rhs.tangent, t),
+            colour: self.colour.lerp(rhs.colour, t),
+            uv: self.uv.lerp(rhs.uv, t),
+        }
+    }
 }
 
 impl Transform {
