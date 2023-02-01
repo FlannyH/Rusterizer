@@ -10,3 +10,6 @@ glam = "0.22.0"
 gltf = {version="1.0.0", features = ["import", "names"] }
 minifb = "0.23.0"
 stb_image = "0.2.4"
+
+[build-dependencies]
+copy_to_output = "2.0.0"
