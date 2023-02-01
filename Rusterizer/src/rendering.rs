@@ -191,7 +191,9 @@ impl Renderer {
         if (x_max as i32 - x_min as i32) <= 0 {
             return;
         }
-
+        let area = edge_function(v0.position.xy(), v1.position.xy(), v2.position.xy()) * 0.5;
+        let inv_area = 1.0 / area;
+            
         for y in y_min..=y_max {
             for x in x_min..=x_max {
                 // Determine whether the point is on the triangle
@@ -199,13 +201,11 @@ impl Renderer {
                 let edge0 = edge_function(v1.position.xy(), v2.position.xy(), coords);
                 let edge1 = edge_function(v2.position.xy(), v0.position.xy(), coords);
                 let edge2 = edge_function(v0.position.xy(), v1.position.xy(), coords);
-                let area =
-                    1.0 / edge_function(v0.position.xy(), v1.position.xy(), v2.position.xy());
 
                 //If so, interpolate the colours of the vertex
                 if edge0 >= 0.0 && edge1 >= 0.0 && edge2 >= 0.0 {
                     //Get barycentric coordinates, texture coordinates, get the vertex colours, and sample the texture
-                    let bary = glam::vec3(edge0 * area, edge1 * area, edge2 * area);
+                    let bary = glam::vec3(edge0 * inv_area, edge1 * inv_area, edge2 * inv_area);
                     let position = lerp_bary(&bary, &v0.position, &v1.position, &v2.position, None);
 
                     // Calculate depth of current pixel
@@ -247,7 +247,7 @@ impl Renderer {
                     if let Some(tex) = texture {
                         // Select mip map level
                         let mut mip_level =
-                            (area / new_depth).log2() - (tex.width.max(tex.height) as f32).log2() + 16.0;
+                            (inv_area / new_depth).log2() - (tex.width.max(tex.height) as f32).log2() + 16.0;
                         mip_level = mip_level.clamp(0.0, (tex.mipmap_offsets.len() - 2) as f32);
 
                         // Sample texture
