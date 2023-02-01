@@ -1,13 +1,14 @@
-use std::ops::Mul;
 use std::{collections::HashMap, path::Path};
 
 use glam::Vec4Swizzles;
 use glam::{Mat4, Vec2, Vec3, Vec4};
 
-use gltf::{buffer::Data, Document};
+use gltf::texture::{MagFilter, MinFilter, WrappingMode};
+use gltf::{buffer::Data};
 
 use crate::rendering::Renderer;
 use crate::structs::Transform;
+use crate::texture::{FilterMode, Material, Sampler, WrapMode};
 use crate::{structs::Vertex, texture::Texture};
 
 pub struct Mesh {
@@ -68,7 +69,6 @@ fn convert_gltf_buffer_to_f32(input_buffer: &[u8], accessor: &gltf::Accessor) ->
 
 fn create_vertex_array(
     primitive: &gltf::Primitive,
-    gltf_document: &Document,
     mesh_data: &[Data],
     local_matrix: Mat4,
 ) -> Mesh {
@@ -100,7 +100,6 @@ fn create_vertex_array(
             accessor.size(),
             accessor.count()
         );
-        // todo: make this less hardcoded in terms of type
         match name.to_string().as_str() {
             "POSITION" => {
                 let values = convert_gltf_buffer_to_f32(buffer_slice, &accessor);
@@ -209,7 +208,6 @@ fn create_vertex_array(
 
 fn traverse_nodes(
     node: &gltf::Node,
-    gltf_document: &Document,
     mesh_data: &Vec<Data>,
     local_transform: Mat4,
     primitives_processed: &mut HashMap<String, Mesh>,
@@ -247,7 +245,7 @@ fn traverse_nodes(
         for primitive in primitives {
             println!("Creating vertex array for mesh {}", node.name().unwrap());
             let mut mesh_buffer_data =
-                create_vertex_array(&primitive, gltf_document, mesh_data, new_local_transform);
+                create_vertex_array(&primitive, mesh_data, new_local_transform);
             let material = String::from(primitive.material().name().unwrap_or("None"));
             #[allow(clippy::map_entry)] // This was really annoying and made the code less readable
             if primitives_processed.contains_key(&material) {
@@ -261,13 +259,7 @@ fn traverse_nodes(
 
     // If it has children, process those
     for child in node.children() {
-        traverse_nodes(
-            &child,
-            gltf_document,
-            mesh_data,
-            new_local_transform,
-            primitives_processed,
-        );
+        traverse_nodes(&child, mesh_data, new_local_transform, primitives_processed);
     }
 }
 
@@ -287,32 +279,110 @@ impl Model {
             // Print node debug
             println!("\t\tNodes:");
             for node in scene.nodes() {
-                traverse_nodes(
-                    &node,
-                    &gltf_document,
-                    &mesh_data,
-                    Mat4::IDENTITY,
-                    &mut self.meshes,
-                );
+                traverse_nodes(&node, &mesh_data, Mat4::IDENTITY, &mut self.meshes);
             }
             println!("test");
         }
 
         // Get all the textures from the GLTF
         for material in gltf_document.materials() {
-            let gltf_tex = material
-                .pbr_metallic_roughness()
-                .base_color_texture()
-                .unwrap()
-                .texture()
-                .source()
-                .index();
-            let image = &image_data[gltf_tex];
-            let mut tex = Texture::load_texture_from_gltf_image(image);
-            tex.generate_mipmaps();
+            let new_material;
+            // Get the base texture info
+            let gltf_tex_info = material.pbr_metallic_roughness().base_color_texture();
+
+            let mut tex;
+            // If there is a base texture, load it
+            if let Some(gltf_tex_info_unwrapped) = gltf_tex_info {
+                // Get image index
+                let gltf_tex = gltf_tex_info_unwrapped.texture().source().index();
+
+                // Get image data
+                let image = &image_data[gltf_tex];
+
+                // Load the texture from that image data
+                tex = Texture::load_texture_from_gltf_image(image);
+                // Generate mipmaps
+                tex.generate_mipmaps();
+
+                // Get sampler mode
+                let gltf_sampler = gltf_tex_info_unwrapped.texture().sampler();
+                let new_sampler = Sampler {
+                    filter_mode_mag: match gltf_sampler.mag_filter().unwrap_or(MagFilter::Linear) {
+                        MagFilter::Nearest => FilterMode::Point,
+                        MagFilter::Linear => FilterMode::Linear,
+                    },
+                    filter_mode_min: match gltf_sampler
+                        .min_filter()
+                        .unwrap_or(MinFilter::LinearMipmapLinear)
+                    {
+                        MinFilter::Nearest
+                        | MinFilter::NearestMipmapLinear
+                        | MinFilter::NearestMipmapNearest => FilterMode::Point,
+                        MinFilter::Linear
+                        | MinFilter::LinearMipmapLinear
+                        | MinFilter::LinearMipmapNearest => FilterMode::Linear,
+                    },
+                    wrap_mode_s: match gltf_sampler.wrap_s() {
+                        WrappingMode::ClampToEdge => WrapMode::Clamp,
+                        WrappingMode::MirroredRepeat => WrapMode::Mirror,
+                        WrappingMode::Repeat => WrapMode::Repeat,
+                    },
+                    wrap_mode_t: match gltf_sampler.wrap_t() {
+                        WrappingMode::ClampToEdge => WrapMode::Clamp,
+                        WrappingMode::MirroredRepeat => WrapMode::Mirror,
+                        WrappingMode::Repeat => WrapMode::Repeat,
+                    },
+                    filter_mode_mipmap: match gltf_sampler
+                        .min_filter()
+                        .unwrap_or(MinFilter::LinearMipmapLinear)
+                    {
+                        MinFilter::Nearest | MinFilter::Linear => FilterMode::Point,
+                        MinFilter::NearestMipmapNearest | MinFilter::LinearMipmapNearest => {
+                            FilterMode::Linear
+                        }
+                        MinFilter::NearestMipmapLinear | MinFilter::LinearMipmapLinear => {
+                            FilterMode::Linear
+                        }
+                    },
+                    mipmap_enabled: match gltf_sampler
+                        .min_filter()
+                        .unwrap_or(MinFilter::LinearMipmapLinear)
+                    {
+                        MinFilter::Nearest | MinFilter::Linear => false,
+                        MinFilter::NearestMipmapNearest | MinFilter::LinearMipmapNearest => true,
+                        MinFilter::NearestMipmapLinear | MinFilter::LinearMipmapLinear => true,
+                    },
+                };
+
+                new_material = Material {
+                    texture: tex,
+                    sampler: new_sampler,
+                };
+            }
+            // If there is no base texture, generate a white one
+            else {
+                new_material = Material {
+                    texture: Texture {
+                        width: 1,
+                        height: 1,
+                        depth: 1,
+                        data: vec![0xFFFFFFFFu32; 1],
+                        mipmap_offsets: vec![0usize; 1],
+                    },
+                    sampler: Sampler {
+                        filter_mode_mag: FilterMode::Point,
+                        filter_mode_min: FilterMode::Point,
+                        filter_mode_mipmap: FilterMode::Point,
+                        wrap_mode_s: WrapMode::Clamp,
+                        wrap_mode_t: WrapMode::Clamp,
+                        mipmap_enabled: false,
+                    },
+                };
+            }
+
             renderer
-                .textures
-                .insert(material.name().unwrap().to_string(), tex);
+                .materials
+                .insert(material.name().unwrap().to_string(), new_material);
         }
     }
 

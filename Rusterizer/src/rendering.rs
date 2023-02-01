@@ -12,12 +12,12 @@ use crate::helpers::*;
 use crate::mesh::Mesh;
 use crate::mesh::Model;
 use crate::structs::*;
-use crate::texture::Texture;
+use crate::texture::Material;
 
 pub struct Renderer {
     pub projection_matrix: Mat4,
     pub view_matrix: Mat4,
-    pub textures: HashMap<String, Texture>,
+    pub materials: HashMap<String, Material>,
 }
 
 fn lerp_bary<T: Mul<f32, Output = T> + Add<T, Output = T> + Copy>(
@@ -100,7 +100,7 @@ impl Renderer {
         v0: Vertex,
         v1: Vertex,
         v2: Vertex,
-        colour_buffer: &mut Vec<u32>,
+        colour_buffer: &mut [u32],
         width: usize,
         height: usize,
     ) {
@@ -143,7 +143,7 @@ impl Renderer {
         depth_buffer: &mut [f32],
         width: usize,
         height: usize,
-        texture: Option<&Texture>,
+        material: Option<&Material>,
     ) {
         // Get mutable copies of vertices
         let mut v0 = v0_in;
@@ -173,7 +173,7 @@ impl Renderer {
         v0 = Self::ndc_to_screen(v0, width, height);
         v1 = Self::ndc_to_screen(v1, width, height);
         v2 = Self::ndc_to_screen(v2, width, height);
-        
+
         // Get bounds of triangle
         let x_min =
             (v0.position.x.min(v1.position.x).min(v2.position.x) as usize).clamp(0, width - 1);
@@ -196,17 +196,24 @@ impl Renderer {
 
         // Calculate mip level
         let mut mip_level = 0.0;
-        if let Some(texture) = texture {
+        let mut texture = None;
+        if let Some(material) = material {
             // Calculate the area of the part of the texture that is on screen
+            texture = Some(&material.texture);
+            let texture = texture.unwrap();
             let texture_size = glam::vec2(texture.width as f32, texture.height as f32);
-            let texture_area = edge_function(v0_in.uv * texture_size, v1_in.uv * texture_size, v2_in.uv * texture_size);
+            let texture_area = edge_function(
+                v0_in.uv * texture_size,
+                v1_in.uv * texture_size,
+                v2_in.uv * texture_size,
+            );
 
             // Calculate the mip level by comparing the area of the texture pixels and the area of the screen pixels
-            mip_level = texture_area.abs().log2() - area.abs().log2();// + 32.0;
+            mip_level = texture_area.abs().log2() - area.abs().log2();
             mip_level *= 0.6; // Some manual tweaking to make it look better
             mip_level = mip_level.clamp(0.0, (texture.mipmap_offsets.len() - 2) as f32);
         }
-            
+
         for y in y_min..=y_max {
             for x in x_min..=x_max {
                 // Determine whether the point is on the triangle
@@ -240,27 +247,39 @@ impl Renderer {
                     let correction = bary.x * rec0 + bary.y * rec1 + bary.z * rec2;
                     let correction = 1.0 / correction;
                     let tex_coords = lerp_bary(&bary, &v0.uv, &v1.uv, &v2.uv, Some(correction));
-                    let normal = lerp_bary(&bary, &v0.normal, &v1.normal, &v2.normal, Some(correction));
-                    let tangent = lerp_bary(&bary, &v0.tangent, &v1.tangent, &v2.tangent, Some(correction));
-                    let mut colour = lerp_bary(&bary, &v0.colour, &v1.colour, &v2.colour, Some(correction));
+                    let normal =
+                        lerp_bary(&bary, &v0.normal, &v1.normal, &v2.normal, Some(correction));
+                    let _tangent = lerp_bary(
+                        &bary,
+                        &v0.tangent,
+                        &v1.tangent,
+                        &v2.tangent,
+                        Some(correction),
+                    ); // not used, but included in case I have time to add normal mapping
+                    let mut colour =
+                        lerp_bary(&bary, &v0.colour, &v1.colour, &v2.colour, Some(correction));
                     if false {
                         colour.x = normal.x * 0.5 + 0.5;
                         colour.y = normal.y * 0.5 + 0.5;
                         colour.z = normal.z * 0.5 + 0.5;
                     }
-                    if false {
+                    if true {
                         colour.x = 1.0;
                         colour.y = 1.0;
                         colour.z = 1.0;
                     }
-                    if true {
+                    if false {
                         // Very basic lighting NdotL
                         colour *= normal.dot(glam::vec3(1.0, 0.5, 0.0).normalize()) * 0.5 + 0.5;
                     }
                     if let Some(tex) = texture {
                         // Sample texture
-                        let texture_sample =
-                            tex.argb_at_uv(tex_coords.x, tex_coords.y, mip_level as usize);
+                        let texture_sample = tex.argb_at_uv(
+                            tex_coords.x,
+                            tex_coords.y,
+                            mip_level as usize,
+                            material.unwrap(),
+                        );
                         colour.x *= ((texture_sample) & 0xFF) as f32 / 255.0;
                         colour.y *= ((texture_sample >> 8) & 0xFF) as f32 / 255.0;
                         colour.z *= ((texture_sample >> 16) & 0xFF) as f32 / 255.0;
@@ -299,13 +318,13 @@ impl Renderer {
         depth_buffer: &mut [f32],
         width: usize,
         height: usize,
-        texture: Option<&Texture>,
+        material: Option<&Material>,
     ) {
         for i in (0..mesh.verts.len()).step_by(3) {
             // Transform vertices
-            let mut v0 = mesh.verts[i];
-            let mut v1 = mesh.verts[i + 1];
-            let mut v2 = mesh.verts[i + 2];
+            let v0 = mesh.verts[i];
+            let v1 = mesh.verts[i + 1];
+            let v2 = mesh.verts[i + 2];
             let v0 = self.vertex_shader(&v0, &model_matrix.trans_matrix());
             let v1 = self.vertex_shader(&v1, &model_matrix.trans_matrix());
             let v2 = self.vertex_shader(&v2, &model_matrix.trans_matrix());
@@ -351,9 +370,8 @@ impl Renderer {
                             a = v2;
                             b = v0;
                             c = v1;
-                        } else
-                        // if v2.position.z < 0.0
-                        {
+                        } else {
+                            // if v2.position.z < 0.0
                             a = v0;
                             b = v1;
                             c = v2;
@@ -390,9 +408,8 @@ impl Renderer {
                             a = v1;
                             b = v2;
                             c = v0;
-                        } else
-                        // if v2.position.z > 0.0
-                        {
+                        } else {
+                            // if v2.position.z > 0.0
                             a = v2;
                             b = v0;
                             c = v1;
@@ -424,7 +441,7 @@ impl Renderer {
 
             // Draw vertices
             for i in (0..new_triangles.len()).step_by(3) {
-                if (new_triangles[i].position.w < 0.0) {
+                if new_triangles[i].position.w < 0.0 {
                     println!("{}", new_triangles[i].position.w);
                 }
                 Self::draw_triangle_filled(
@@ -435,7 +452,7 @@ impl Renderer {
                     depth_buffer,
                     width,
                     height,
-                    texture,
+                    material,
                 );
             }
         }
@@ -460,7 +477,7 @@ impl Renderer {
                 height,
                 match tex_id.as_str() {
                     "None" => None,
-                    _ => Some(&self.textures[tex_id]),
+                    _ => Some(&self.materials[tex_id]),
                 },
             );
         }

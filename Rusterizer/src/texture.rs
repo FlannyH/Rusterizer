@@ -9,6 +9,40 @@ pub struct Texture {
     pub mipmap_offsets: Vec<usize>,
 }
 
+pub enum FilterMode {
+    Point,
+    Linear,
+}
+
+pub enum WrapMode {
+    Repeat,
+    Mirror,
+    Clamp,
+}
+
+pub struct Sampler {
+    pub filter_mode_mag: FilterMode,
+    pub filter_mode_min: FilterMode,
+    pub filter_mode_mipmap: FilterMode,
+    pub wrap_mode_s: WrapMode,
+    pub wrap_mode_t: WrapMode,
+    pub mipmap_enabled: bool,
+}
+
+pub struct Material {
+    pub texture: Texture,
+    pub sampler: Sampler,
+}
+
+#[derive(Clone)]
+enum PixelComp {
+    Skip,
+    Red,
+    Green,
+    Blue,
+    Alpha,
+}
+
 impl Texture {
     pub fn load(path: &Path) -> Self {
         //Load image
@@ -61,15 +95,26 @@ impl Texture {
     }
 
     //Get ARGB value from a UV coordinate
-    pub fn argb_at_uv(&self, u: f32, v: f32, mip_level: usize) -> u32 {
+    pub fn argb_at_uv(&self, u: f32, v: f32, mip_level: usize, material: &Material) -> u32 {
+        let u = match material.sampler.wrap_mode_s {
+            WrapMode::Repeat => u - u.floor(), // Repeat - like a saw wave
+            WrapMode::Mirror => 2.0 * (u * 0.5 - (u * 0.5 + 0.5).floor()).abs(), // Mirror - like a triangle wave
+            WrapMode::Clamp => u.clamp(0.0, 1.0 - f32::EPSILON),
+        };
+        let v = match material.sampler.wrap_mode_s {
+            WrapMode::Repeat => v - v.floor(), // Repeat - like a saw wave
+            WrapMode::Mirror => 2.0 * (v * 0.5 - (v * 0.5 + 0.5).floor()).abs(), // Mirror - like a triangle wave
+            WrapMode::Clamp => v.clamp(0.0, 1.0 - f32::EPSILON),
+        };
+
         let (u, v) = (
-            (u % 1.0) * (self.width >> mip_level) as f32,
-            (v % 1.0) * (self.height >> mip_level) as f32,
+            u * (self.width >> mip_level) as f32,
+            v * (self.height >> mip_level) as f32,
         );
         let id = coords_to_index(u as u32, v as u32, (self.width >> mip_level) as u32);
 
         //If the data is in bounds, show that pixel. Otherwise, show debug pink
-        if id < self.data.len() {
+        if (id + self.mipmap_offsets[mip_level]) < self.data.len() {
             self.data[id + self.mipmap_offsets[mip_level]]
         } else {
             colour_rgba(255, 255, 0, 255)
@@ -77,19 +122,73 @@ impl Texture {
     }
 
     pub fn load_texture_from_gltf_image(image: &gltf::image::Data) -> Texture {
+        // Get pixel swizzle pattern
+        let swizzle_pattern = match image.format {
+            gltf::image::Format::R8 => vec![PixelComp::Red],
+            gltf::image::Format::R8G8 => vec![PixelComp::Red, PixelComp::Green],
+            gltf::image::Format::R8G8B8 => vec![PixelComp::Red, PixelComp::Green, PixelComp::Blue],
+            gltf::image::Format::R8G8B8A8 => vec![
+                PixelComp::Red,
+                PixelComp::Green,
+                PixelComp::Blue,
+                PixelComp::Alpha,
+            ],
+            gltf::image::Format::B8G8R8 => vec![
+                PixelComp::Blue,
+                PixelComp::Green,
+                PixelComp::Red,
+                PixelComp::Skip,
+            ],
+            gltf::image::Format::B8G8R8A8 => vec![
+                PixelComp::Blue,
+                PixelComp::Green,
+                PixelComp::Red,
+                PixelComp::Alpha,
+            ],
+            gltf::image::Format::R16 => vec![PixelComp::Skip, PixelComp::Red],
+            gltf::image::Format::R16G16 => vec![
+                PixelComp::Skip,
+                PixelComp::Red,
+                PixelComp::Skip,
+                PixelComp::Green,
+            ],
+            gltf::image::Format::R16G16B16 => vec![
+                PixelComp::Skip,
+                PixelComp::Red,
+                PixelComp::Skip,
+                PixelComp::Green,
+                PixelComp::Skip,
+                PixelComp::Blue,
+            ],
+            gltf::image::Format::R16G16B16A16 => vec![
+                PixelComp::Skip,
+                PixelComp::Red,
+                PixelComp::Skip,
+                PixelComp::Green,
+                PixelComp::Skip,
+                PixelComp::Blue,
+                PixelComp::Skip,
+                PixelComp::Alpha,
+            ],
+        };
         Texture {
             width: image.width as usize,
             height: image.height as usize,
             depth: 4,
             data: {
                 let mut data = Vec::<u32>::new();
-                for i in (0..image.pixels.len()).step_by(4) {
-                    data.push(
-                        (image.pixels[i] as u32)
-                            + ((image.pixels[i + 1] as u32) << 8)
-                            + ((image.pixels[i + 2] as u32) << 16)
-                            + ((image.pixels[i + 3] as u32) << 24),
-                    );
+                for i in (0..image.pixels.len()).step_by(swizzle_pattern.len()) {
+                    let mut new_pixel = 0u32;
+                    for (comp, entry) in swizzle_pattern.iter().enumerate() {
+                        match entry {
+                            PixelComp::Skip => {}
+                            PixelComp::Red => new_pixel |= image.pixels[i + comp] as u32,
+                            PixelComp::Green => new_pixel |= (image.pixels[i + comp] as u32) << 8,
+                            PixelComp::Blue => new_pixel |= (image.pixels[i + comp] as u32) << 16,
+                            PixelComp::Alpha => new_pixel |= (image.pixels[i + comp] as u32) << 24,
+                        }
+                    }
+                    data.push(new_pixel);
                 }
                 data
             },
@@ -110,7 +209,7 @@ impl Texture {
             let dst_width = self.width >> (i + 1);
             let dst_height = self.height >> (i + 1);
 
-            if dst_width == 0 || dst_height == 0 {
+            if src_width == 1 || src_height == 1 {
                 break;
             }
 
@@ -147,7 +246,7 @@ impl Texture {
                         + ((pixel_sample3 >> 24) & 0xFF)
                         + ((pixel_sample4 >> 24) & 0xFF))
                         / 4;
-                    let pixel_output = (r) | (g << 8) | (b << 16) | (a << 24);
+                    let pixel_output = (r << 0) | (g << 8) | (b << 16) | (a << 24);
 
                     // Write it to the output buffer
                     new_mipmap.push(pixel_output);

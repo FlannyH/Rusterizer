@@ -8,8 +8,8 @@ pub struct Camera {
     pub mouse_sensitivity: f32,
     mouse_pos_old: (f32, f32),
     should_skip_mouse_update: bool,
-    pitch: f32,
-    yaw: f32,
+    pub pitch: f32,
+    pub yaw: f32,
 }
 
 impl Camera {
