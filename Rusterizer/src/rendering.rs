@@ -136,9 +136,9 @@ impl Renderer {
     }
 
     pub fn draw_triangle_filled(
-        v0: FragIn,
-        v1: FragIn,
-        v2: FragIn,
+        v0_in: FragIn,
+        v1_in: FragIn,
+        v2_in: FragIn,
         colour_buffer: &mut [u32],
         depth_buffer: &mut [f32],
         width: usize,
@@ -146,9 +146,9 @@ impl Renderer {
         texture: Option<&Texture>,
     ) {
         // Get mutable copies of vertices
-        let mut v0 = v0;
-        let mut v1 = v1;
-        let mut v2 = v2;
+        let mut v0 = v0_in;
+        let mut v1 = v1_in;
+        let mut v2 = v2_in;
 
         // Get reciprocals
         let rec0 = 1.0 / v0.position.w;
@@ -170,9 +170,9 @@ impl Renderer {
         v2.uv *= rec2;
 
         // Map to screen
-        let mut v0 = Self::ndc_to_screen(v0, width, height);
-        let mut v1 = Self::ndc_to_screen(v1, width, height);
-        let mut v2 = Self::ndc_to_screen(v2, width, height);
+        v0 = Self::ndc_to_screen(v0, width, height);
+        v1 = Self::ndc_to_screen(v1, width, height);
+        v2 = Self::ndc_to_screen(v2, width, height);
         
         // Get bounds of triangle
         let x_min =
@@ -193,6 +193,19 @@ impl Renderer {
         }
         let area = edge_function(v0.position.xy(), v1.position.xy(), v2.position.xy()) * 0.5;
         let inv_area = 1.0 / area;
+
+        // Calculate mip level
+        let mut mip_level = 0.0;
+        if let Some(texture) = texture {
+            // Calculate the area of the part of the texture that is on screen
+            let texture_size = glam::vec2(texture.width as f32, texture.height as f32);
+            let texture_area = edge_function(v0_in.uv * texture_size, v1_in.uv * texture_size, v2_in.uv * texture_size);
+
+            // Calculate the mip level by comparing the area of the texture pixels and the area of the screen pixels
+            mip_level = texture_area.abs().log2() - area.abs().log2();// + 32.0;
+            mip_level *= 0.6; // Some manual tweaking to make it look better
+            mip_level = mip_level.clamp(0.0, (texture.mipmap_offsets.len() - 2) as f32);
+        }
             
         for y in y_min..=y_max {
             for x in x_min..=x_max {
@@ -245,11 +258,6 @@ impl Renderer {
                         colour *= normal.dot(glam::vec3(1.0, 0.5, 0.0).normalize()) * 0.5 + 0.5;
                     }
                     if let Some(tex) = texture {
-                        // Select mip map level
-                        let mut mip_level =
-                            (inv_area / new_depth).log2() - (tex.width.max(tex.height) as f32).log2() + 16.0;
-                        mip_level = mip_level.clamp(0.0, (tex.mipmap_offsets.len() - 2) as f32);
-
                         // Sample texture
                         let texture_sample =
                             tex.argb_at_uv(tex_coords.x, tex_coords.y, mip_level as usize);

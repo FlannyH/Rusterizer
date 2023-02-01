@@ -76,11 +76,9 @@ fn main() {
             glam::Mat4::perspective_rh(0.4 * PI, WIDTH as f32 / HEIGHT as f32, 0.1, 100.0);
 
         camera.update(&window, 0.01666);
-        //model_transform.rotation *= glam::Quat::from_euler(glam::EulerRot::ZYX, 0.0, 0.01, 0.0);
         renderer.set_view_matrix(camera.transform.view_matrix());
         renderer.set_projection_matrix(perspective_matrix);
 
-        //model_transform.translation.x += 0.001;
 
         // Draw the triangle
         renderer.draw_model(
@@ -91,10 +89,6 @@ fn main() {
             WIDTH,
             HEIGHT,
         );
-        //draw_triangle_filled(v0, v2, v1, &mut buffer, WIDTH, Some(&tex));
-        //draw_triangle_wireframe(v0, v2, v1, &mut buffer, WIDTH, HEIGHT);cargo fmt
-        //draw_triangle_filled(v0, v3, v2, &mut buffer, WIDTH, Some(&tex));
-        //draw_triangle_wireframe(v0, v3, v2, &mut buffer, WIDTH, HEIGHT);
 
         window
             .update_with_buffer(&color_buffer, WIDTH, HEIGHT)
