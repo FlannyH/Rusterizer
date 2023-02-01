@@ -25,8 +25,9 @@ fn lerp_bary<T: Mul<f32, Output = T> + Add<T, Output = T> + Copy>(
     v0: &T,
     v1: &T,
     v2: &T,
+    correction: Option<f32>,
 ) -> T {
-    (*v0 * bary.x) + (*v1 * bary.y) + (*v2 * bary.z)
+    ((*v0 * bary.x) + (*v1 * bary.y) + (*v2 * bary.z)) * correction.unwrap_or(1.0)
 }
 
 impl Renderer {
@@ -144,9 +145,35 @@ impl Renderer {
         height: usize,
         texture: Option<&Texture>,
     ) {
+        // Get mutable copies of vertices
+        let mut v0 = v0;
+        let mut v1 = v1;
+        let mut v2 = v2;
+
+        // Get reciprocals
+        let rec0 = 1.0 / v0.position.w;
+        let rec1 = 1.0 / v1.position.w;
+        let rec2 = 1.0 / v2.position.w;
+
+        // Perspective division on all attributes
+        v0.normal *= rec0;
+        v0.tangent *= rec0;
+        v0.colour *= rec0;
+        v0.uv *= rec0;
+        v1.normal *= rec1;
+        v1.tangent *= rec1;
+        v1.colour *= rec1;
+        v1.uv *= rec1;
+        v2.normal *= rec2;
+        v2.tangent *= rec2;
+        v2.colour *= rec2;
+        v2.uv *= rec2;
+
+        // Map to screen
         let mut v0 = Self::ndc_to_screen(v0, width, height);
         let mut v1 = Self::ndc_to_screen(v1, width, height);
         let mut v2 = Self::ndc_to_screen(v2, width, height);
+        
         // Get bounds of triangle
         let x_min =
             (v0.position.x.min(v1.position.x).min(v2.position.x) as usize).clamp(0, width - 1);
@@ -179,7 +206,7 @@ impl Renderer {
                 if edge0 >= 0.0 && edge1 >= 0.0 && edge2 >= 0.0 {
                     //Get barycentric coordinates, texture coordinates, get the vertex colours, and sample the texture
                     let bary = glam::vec3(edge0 * area, edge1 * area, edge2 * area);
-                    let position = lerp_bary(&bary, &v0.position, &v1.position, &v2.position);
+                    let position = lerp_bary(&bary, &v0.position, &v1.position, &v2.position, None);
 
                     // Calculate depth of current pixel
                     let new_depth = position.z / position.w;
@@ -197,10 +224,12 @@ impl Renderer {
                     // Write to depth buffer
                     depth_buffer[x + y * width] = new_depth;
 
-                    let tex_coords = lerp_bary(&bary, &v0.uv, &v1.uv, &v2.uv);
-                    let normal = lerp_bary(&bary, &v0.normal, &v1.normal, &v2.normal);
-                    let tangent = lerp_bary(&bary, &v0.tangent, &v1.tangent, &v2.tangent);
-                    let mut colour = lerp_bary(&bary, &v0.colour, &v1.colour, &v2.colour);
+                    let correction = bary.x * rec0 + bary.y * rec1 + bary.z * rec2;
+                    let correction = 1.0 / correction;
+                    let tex_coords = lerp_bary(&bary, &v0.uv, &v1.uv, &v2.uv, Some(correction));
+                    let normal = lerp_bary(&bary, &v0.normal, &v1.normal, &v2.normal, Some(correction));
+                    let tangent = lerp_bary(&bary, &v0.tangent, &v1.tangent, &v2.tangent, Some(correction));
+                    let mut colour = lerp_bary(&bary, &v0.colour, &v1.colour, &v2.colour, Some(correction));
                     if false {
                         colour.x = normal.x * 0.5 + 0.5;
                         colour.y = normal.y * 0.5 + 0.5;

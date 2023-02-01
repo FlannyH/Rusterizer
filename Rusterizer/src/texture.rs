@@ -63,8 +63,8 @@ impl Texture {
     //Get ARGB value from a UV coordinate
     pub fn argb_at_uv(&self, u: f32, v: f32, mip_level: usize) -> u32 {
         let (u, v) = (
-            u * (self.width >> mip_level) as f32,
-            v * (self.height >> mip_level) as f32,
+            (u % 1.0) * (self.width >> mip_level) as f32,
+            (v % 1.0) * (self.height >> mip_level) as f32,
         );
         let id = coords_to_index(u as u32, v as u32, (self.width >> mip_level) as u32);
 
