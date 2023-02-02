@@ -58,7 +58,6 @@ impl Camera {
         if let Some(result) = window.get_scroll_wheel() {
             let (_x, y) = result;
             self.move_speed *= 1.005_f32.powf(y);
-            println!("{}", result.1);
         }
 
         // Mouse rotation

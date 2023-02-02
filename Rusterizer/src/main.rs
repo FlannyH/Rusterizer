@@ -6,6 +6,7 @@ mod mesh;
 mod rendering;
 mod structs;
 mod texture;
+mod triangle_queue;
 
 use std::{
     collections::HashMap,
@@ -43,7 +44,7 @@ fn main() {
 
     // Load mesh
     let mut model = Model::new();
-    model.create_from_gltf(Path::new("./assets/kelp.gltf"), &mut renderer);
+    model.create_from_gltf(Path::new("./assets/spyro.gltf"), &mut renderer);
 
     let model_transform = Transform {
         translation: glam::vec3(0.0, 0.0, 0.0),
@@ -83,7 +84,7 @@ fn main() {
         //     "{}, {}, {}",
         //     camera.transform.translation, camera.pitch, camera.yaw
         // );
-        println!("frametime: {deltatime:.5} ms");
+        println!("frametime: {deltatime:.6} ms");
 
         let perspective_matrix =
             glam::Mat4::perspective_rh(0.4 * PI, WIDTH as f32 / HEIGHT as f32, 0.1, 100.0);
