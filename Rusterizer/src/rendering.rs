@@ -58,7 +58,7 @@ impl Renderer {
                         x += add_x;
                     }
                     if x >= 0 && x < (width as i32) && y >= 0 && y < (height as i32) {
-                        buffer[coords_to_index(x as u32, y as u32, width as u32)] =
+                        buffer[coords_to_index(x as usize, y as usize, width)] =
                             colour_rgb(0, 255, 0);
                     }
                 }
@@ -74,7 +74,7 @@ impl Renderer {
                         y += add_y;
                     }
                     if x >= 0 && x < (width as i32) && y >= 0 && y < (height as i32) {
-                        buffer[coords_to_index(x as u32, y as u32, width as u32)] =
+                        buffer[coords_to_index(x as usize, y as usize, width)] =
                             colour_rgb(255, 0, 0);
                     }
                 }
@@ -82,7 +82,7 @@ impl Renderer {
             Ordering::Equal => {
                 for _i in 0..dy {
                     if x >= 0 && x < (width as i32) && y >= 0 && y < (height as i32) {
-                        buffer[coords_to_index(x as u32, y as u32, width as u32)] =
+                        buffer[coords_to_index(x as usize, y as usize, width)] =
                             colour_rgb(0, 0, 255);
                     }
                     y += add_y;
@@ -197,6 +197,7 @@ impl Renderer {
         // Calculate mip level
         let mut mip_level = 0.0;
         let mut texture = None;
+        let mut is_mag = false;
         if let Some(material) = material {
             // Calculate the area of the part of the texture that is on screen
             texture = Some(&material.texture);
@@ -207,10 +208,13 @@ impl Renderer {
                 v1_in.uv * texture_size,
                 v2_in.uv * texture_size,
             );
+            is_mag = texture_area.abs() > area.abs();
 
             // Calculate the mip level by comparing the area of the texture pixels and the area of the screen pixels
-            mip_level = texture_area.abs().log2() - area.abs().log2();
-            mip_level *= 0.6; // Some manual tweaking to make it look better
+            let tex_area_log2 = texture_area.abs().log2();
+            let area_log2 = area.abs().log2();
+            mip_level = tex_area_log2 - area_log2;
+            mip_level *= 1.0; // Some manual tweaking to make it look better
             mip_level = mip_level.clamp(0.0, (texture.mipmap_offsets.len() - 2) as f32);
         }
 
@@ -231,6 +235,9 @@ impl Renderer {
                     // Calculate depth of current pixel
                     let new_depth = position.z / position.w;
 
+                    // Make depth influence mip level
+                    mip_level *= 1.0 - new_depth;
+
                     // Depth testing
                     if new_depth < depth_buffer[x + y * width] {
                         continue;
@@ -240,9 +247,6 @@ impl Renderer {
                     if !(0.0..=1.0).contains(&new_depth) {
                         continue;
                     }
-
-                    // Write to depth buffer
-                    depth_buffer[x + y * width] = new_depth;
 
                     let correction = bary.x * rec0 + bary.y * rec1 + bary.z * rec2;
                     let correction = 1.0 / correction;
@@ -263,12 +267,12 @@ impl Renderer {
                         colour.y = normal.y * 0.5 + 0.5;
                         colour.z = normal.z * 0.5 + 0.5;
                     }
-                    if true {
+                    if false {
                         colour.x = 1.0;
                         colour.y = 1.0;
                         colour.z = 1.0;
                     }
-                    if false {
+                    if true {
                         // Very basic lighting NdotL
                         colour *= normal.dot(glam::vec3(1.0, 0.5, 0.0).normalize()) * 0.5 + 0.5;
                     }
@@ -278,11 +282,15 @@ impl Renderer {
                             tex_coords.x,
                             tex_coords.y,
                             mip_level as usize,
+                            is_mag,
                             material.unwrap(),
                         );
                         colour.x *= ((texture_sample) & 0xFF) as f32 / 255.0;
                         colour.y *= ((texture_sample >> 8) & 0xFF) as f32 / 255.0;
                         colour.z *= ((texture_sample >> 16) & 0xFF) as f32 / 255.0;
+                        if (((texture_sample >> 24) & 0xFF) as f32 / 255.0) < 0.5 {
+                            continue;
+                        }
                     }
                     //*i = texture_sample;
                     colour_buffer[x + y * width] = colour_rgb(
@@ -290,6 +298,8 @@ impl Renderer {
                         (colour.y * 255.0) as u8,
                         (colour.z * 255.0) as u8,
                     );
+                    // Write to depth buffer
+                    depth_buffer[x + y * width] = new_depth;
                     //*i = colour_rgb((tex_coords.x * 255.0) as u8, (tex_coords.y * 255.0) as u8, 0);
                 }
             }
@@ -441,9 +451,6 @@ impl Renderer {
 
             // Draw vertices
             for i in (0..new_triangles.len()).step_by(3) {
-                if new_triangles[i].position.w < 0.0 {
-                    println!("{}", new_triangles[i].position.w);
-                }
                 Self::draw_triangle_filled(
                     new_triangles[i],
                     new_triangles[i + 1],

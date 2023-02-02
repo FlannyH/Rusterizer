@@ -9,6 +9,7 @@ pub struct Texture {
     pub mipmap_offsets: Vec<usize>,
 }
 
+#[derive(PartialEq)]
 pub enum FilterMode {
     Point,
     Linear,
@@ -95,7 +96,14 @@ impl Texture {
     }
 
     //Get ARGB value from a UV coordinate
-    pub fn argb_at_uv(&self, u: f32, v: f32, mip_level: usize, material: &Material) -> u32 {
+    pub fn argb_at_uv(
+        &self,
+        u: f32,
+        v: f32,
+        mip_level: usize,
+        is_mag: bool,
+        material: &Material,
+    ) -> u32 {
         let u = match material.sampler.wrap_mode_s {
             WrapMode::Repeat => u - u.floor(), // Repeat - like a saw wave
             WrapMode::Mirror => 2.0 * (u * 0.5 - (u * 0.5 + 0.5).floor()).abs(), // Mirror - like a triangle wave
@@ -111,13 +119,51 @@ impl Texture {
             u * (self.width >> mip_level) as f32,
             v * (self.height >> mip_level) as f32,
         );
-        let id = coords_to_index(u as u32, v as u32, (self.width >> mip_level) as u32);
 
-        //If the data is in bounds, show that pixel. Otherwise, show debug pink
-        if (id + self.mipmap_offsets[mip_level]) < self.data.len() {
-            self.data[id + self.mipmap_offsets[mip_level]]
+        if (is_mag && material.sampler.filter_mode_mag == FilterMode::Linear)
+            || (!is_mag && material.sampler.filter_mode_min == FilterMode::Linear)
+        {
+            // Find weights
+            let u1 = u.floor();
+            let u2 = u.ceil();
+            let v1 = v.floor();
+            let v2 = v.ceil();
+            let weight4 = ((u - u1) * (v - v1)) / ((u2 - u1) * (v2 - v1));
+            let weight3 = ((u2 - u) * (v - v1)) / ((u2 - u1) * (v2 - v1));
+            let weight2 = ((u - u1) * (v2 - v)) / ((u2 - u1) * (v2 - v1));
+            let weight1 = ((u2 - u) * (v2 - v)) / ((u2 - u1) * (v2 - v1));
+
+            // Sample texture
+            let index1 = coords_to_index(u1 as usize, v1 as usize, self.width >> mip_level);
+            let index2 = coords_to_index(
+                (u2 as usize) % (self.width >> mip_level),
+                v1 as usize,
+                self.width >> mip_level,
+            );
+            let index3 = coords_to_index(
+                u1 as usize,
+                (v2 as usize) % (self.height >> mip_level),
+                self.width >> mip_level,
+            );
+            let index4 = coords_to_index(
+                (u2 as usize) % (self.width >> mip_level),
+                (v2 as usize) % (self.height >> mip_level),
+                self.width >> mip_level,
+            );
+
+            average_four_pixels(
+                self.data[self.mipmap_offsets[mip_level] + index1],
+                self.data[self.mipmap_offsets[mip_level] + index2],
+                self.data[self.mipmap_offsets[mip_level] + index3],
+                self.data[self.mipmap_offsets[mip_level] + index4],
+                weight1,
+                weight2,
+                weight3,
+                weight4,
+            )
         } else {
-            colour_rgba(255, 255, 0, 255)
+            let index = coords_to_index(u as usize, v as usize, self.width >> mip_level);
+            self.data[self.mipmap_offsets[mip_level] + index]
         }
     }
 
@@ -178,14 +224,25 @@ impl Texture {
             data: {
                 let mut data = Vec::<u32>::new();
                 for i in (0..image.pixels.len()).step_by(swizzle_pattern.len()) {
-                    let mut new_pixel = 0u32;
+                    let mut new_pixel = 0xFFFFFFFFu32;
                     for (comp, entry) in swizzle_pattern.iter().enumerate() {
                         match entry {
                             PixelComp::Skip => {}
-                            PixelComp::Red => new_pixel |= image.pixels[i + comp] as u32,
-                            PixelComp::Green => new_pixel |= (image.pixels[i + comp] as u32) << 8,
-                            PixelComp::Blue => new_pixel |= (image.pixels[i + comp] as u32) << 16,
-                            PixelComp::Alpha => new_pixel |= (image.pixels[i + comp] as u32) << 24,
+                            PixelComp::Red => {
+                                new_pixel = new_pixel & 0xFFFFFF00 | image.pixels[i + comp] as u32
+                            }
+                            PixelComp::Green => {
+                                new_pixel =
+                                    new_pixel & 0xFFFF00FF | (image.pixels[i + comp] as u32) << 8
+                            }
+                            PixelComp::Blue => {
+                                new_pixel =
+                                    new_pixel & 0xFF00FFFF | (image.pixels[i + comp] as u32) << 16
+                            }
+                            PixelComp::Alpha => {
+                                new_pixel =
+                                    new_pixel & 0x00FFFFFF | (image.pixels[i + comp] as u32) << 24
+                            }
                         }
                     }
                     data.push(new_pixel);
@@ -226,27 +283,16 @@ impl Texture {
                         self.data[src_offset + ((x * 2) + 0) + ((y * 2) + 1) * src_width];
                     let pixel_sample4 =
                         self.data[src_offset + ((x * 2) + 1) + ((y * 2) + 1) * src_width];
-                    let r = (((pixel_sample1 >> 0) & 0xFF)
-                        + ((pixel_sample2 >> 0) & 0xFF)
-                        + ((pixel_sample3 >> 0) & 0xFF)
-                        + ((pixel_sample4 >> 0) & 0xFF))
-                        / 4;
-                    let g = (((pixel_sample1 >> 8) & 0xFF)
-                        + ((pixel_sample2 >> 8) & 0xFF)
-                        + ((pixel_sample3 >> 8) & 0xFF)
-                        + ((pixel_sample4 >> 8) & 0xFF))
-                        / 4;
-                    let b = (((pixel_sample1 >> 16) & 0xFF)
-                        + ((pixel_sample2 >> 16) & 0xFF)
-                        + ((pixel_sample3 >> 16) & 0xFF)
-                        + ((pixel_sample4 >> 16) & 0xFF))
-                        / 4;
-                    let a = (((pixel_sample1 >> 24) & 0xFF)
-                        + ((pixel_sample2 >> 24) & 0xFF)
-                        + ((pixel_sample3 >> 24) & 0xFF)
-                        + ((pixel_sample4 >> 24) & 0xFF))
-                        / 4;
-                    let pixel_output = (r << 0) | (g << 8) | (b << 16) | (a << 24);
+                    let pixel_output = average_four_pixels(
+                        pixel_sample1,
+                        pixel_sample2,
+                        pixel_sample3,
+                        pixel_sample4,
+                        0.25,
+                        0.25,
+                        0.25,
+                        0.25,
+                    );
 
                     // Write it to the output buffer
                     new_mipmap.push(pixel_output);
@@ -263,4 +309,36 @@ impl Texture {
             i += 1;
         }
     }
+}
+
+fn average_four_pixels(
+    pixel_sample1: u32,
+    pixel_sample2: u32,
+    pixel_sample3: u32,
+    pixel_sample4: u32,
+    weight1: f32,
+    weight2: f32,
+    weight3: f32,
+    weight4: f32,
+) -> u32 {
+    let r = (((pixel_sample1 >> 0) & 0xFF) as f32) * weight1
+        + (((pixel_sample2 >> 0) & 0xFF) as f32) * weight2
+        + (((pixel_sample3 >> 0) & 0xFF) as f32) * weight3
+        + (((pixel_sample4 >> 0) & 0xFF) as f32) * weight4;
+    let g = (((pixel_sample1 >> 8) & 0xFF) as f32) * weight1
+        + (((pixel_sample2 >> 8) & 0xFF) as f32) * weight2
+        + (((pixel_sample3 >> 8) & 0xFF) as f32) * weight3
+        + (((pixel_sample4 >> 8) & 0xFF) as f32) * weight4;
+    let b = (((pixel_sample1 >> 16) & 0xFF) as f32) * weight1
+        + (((pixel_sample2 >> 16) & 0xFF) as f32) * weight2
+        + (((pixel_sample3 >> 16) & 0xFF) as f32) * weight3
+        + (((pixel_sample4 >> 16) & 0xFF) as f32) * weight4;
+    let a = (((pixel_sample1 >> 24) & 0xFF) as f32) * weight1
+        + (((pixel_sample2 >> 24) & 0xFF) as f32) * weight2
+        + (((pixel_sample3 >> 24) & 0xFF) as f32) * weight3
+        + (((pixel_sample4 >> 24) & 0xFF) as f32) * weight4;
+    ((r.clamp(0.0, 255.0) as u32) << 0)
+        | ((g.clamp(0.0, 255.0) as u32) << 8)
+        | ((b.clamp(0.0, 255.0) as u32) << 16)
+        | ((a.clamp(0.0, 255.0) as u32) << 24)
 }

@@ -3,8 +3,8 @@ use glam::Vec2;
 pub fn index_to_coords(index: usize, width: usize) -> glam::Vec2 {
     glam::vec2((index % width) as f32, (index / width) as f32)
 }
-pub fn coords_to_index(x: u32, y: u32, width: u32) -> usize {
-    (x + (y * width)) as usize
+pub fn coords_to_index(x: usize, y: usize, width: usize) -> usize {
+    x + (y * width)
 }
 pub fn colour_rgb(red: u8, green: u8, blue: u8) -> u32 {
     ((red as u32) << 16) + ((green as u32) << 8) + (blue as u32)

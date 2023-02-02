@@ -43,7 +43,7 @@ fn main() {
 
     // Load mesh
     let mut model = Model::new();
-    model.create_from_gltf(Path::new("./assets/summerforest.gltf"), &mut renderer);
+    model.create_from_gltf(Path::new("./assets/kelp.gltf"), &mut renderer);
 
     let model_transform = Transform {
         translation: glam::vec3(0.0, 0.0, 0.0),
@@ -62,9 +62,9 @@ fn main() {
         0.005,
     );
 
-    camera.transform.translation = glam::vec3(14.73295, 36.441322, -24.180363);
-    camera.pitch = -0.24;
-    camera.yaw = -1.07;
+    camera.transform.translation = glam::vec3(10.873289, 7.532974, -14.913272);
+    camera.pitch = -0.49;
+    camera.yaw = -3.69;
     camera.update(&window, 0.0);
 
     // Main loop
@@ -79,10 +79,11 @@ fn main() {
             depth_buffer[i] = 0.0;
         }
 
-        println!(
-            "{}, {}, {}",
-            camera.transform.translation, camera.pitch, camera.yaw
-        );
+        // println!(
+        //     "{}, {}, {}",
+        //     camera.transform.translation, camera.pitch, camera.yaw
+        // );
+        println!("frametime: {deltatime:.5} ms");
 
         let perspective_matrix =
             glam::Mat4::perspective_rh(0.4 * PI, WIDTH as f32 / HEIGHT as f32, 0.1, 100.0);

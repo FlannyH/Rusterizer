@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use minifb::{Key, MouseButton, MouseMode, Window};
 
 use crate::structs::Transform;
@@ -52,7 +54,14 @@ impl Camera {
             self.transform.translation -= self.move_speed * delta_time * glam::vec3(0.0, 1.0, 0.0);
         }
 
-        // Mouse rotation'
+        // Movement speed increase, like in Minecraft spectator mode
+        if let Some(result) = window.get_scroll_wheel() {
+            let (_x, y) = result;
+            self.move_speed *= 1.005_f32.powf(y);
+            println!("{}", result.1);
+        }
+
+        // Mouse rotation
         if window.get_mouse_down(MouseButton::Right) {
             // Update mouse position
             let mouse_pos = window.get_mouse_pos(MouseMode::Pass).unwrap();
@@ -65,6 +74,7 @@ impl Camera {
             // If the mouse position is a specific high value, that means we're still settling in after starting to hold right click
             if !self.should_skip_mouse_update {
                 self.pitch -= delta_mouse.1 * self.mouse_sensitivity;
+                self.pitch = self.pitch.clamp(-PI * 0.4999, PI * 0.4999);
                 self.yaw -= delta_mouse.0 * self.mouse_sensitivity;
                 self.transform.rotation =
                     glam::Quat::from_euler(glam::EulerRot::YXZ, self.yaw, self.pitch, 0.0)

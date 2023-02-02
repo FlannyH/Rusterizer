@@ -3,8 +3,8 @@ use std::{collections::HashMap, path::Path};
 use glam::Vec4Swizzles;
 use glam::{Mat4, Vec2, Vec3, Vec4};
 
+use gltf::buffer::Data;
 use gltf::texture::{MagFilter, MinFilter, WrappingMode};
-use gltf::{buffer::Data};
 
 use crate::rendering::Renderer;
 use crate::structs::Transform;
