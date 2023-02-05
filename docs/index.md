@@ -1,7 +1,7 @@
 ---
 layout: default
-title: Rusterizer Masterclass submission
-description: A short desctiption of your submission
+title: Rusterizer Submission
+description: CPU Rasterizer made in Rust
 ---
 
 # Title
