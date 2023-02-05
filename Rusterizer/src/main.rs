@@ -44,7 +44,7 @@ fn main() {
 
     // Load mesh
     let mut model = Model::new();
-    model.create_from_gltf(Path::new("./assets/spyro.gltf"), &mut renderer);
+    model.create_from_gltf(Path::new("./assets/miptest2.gltf"), &mut renderer);
 
     let model_transform = Transform {
         translation: glam::vec3(0.0, 0.0, 0.0),
@@ -63,9 +63,9 @@ fn main() {
         0.005,
     );
 
-    camera.transform.translation = glam::vec3(10.873289, 7.532974, -14.913272);
-    camera.pitch = -0.49;
-    camera.yaw = -3.69;
+    //camera.transform.translation = glam::vec3(10.873289, 7.532974, -14.913272);
+    //camera.pitch = -0.49;
+    //camera.yaw = -3.69;
     camera.update(&window, 0.0);
 
     // Main loop
