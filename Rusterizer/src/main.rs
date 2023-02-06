@@ -84,7 +84,7 @@ fn main() {
         //     "{}, {}, {}",
         //     camera.transform.translation, camera.pitch, camera.yaw
         // );
-        println!("frametime: {deltatime:.6} ms");
+        println!("frametime: {deltatime:.6} s");
 
         let perspective_matrix =
             glam::Mat4::perspective_rh(0.4 * PI, WIDTH as f32 / HEIGHT as f32, 0.1, 100.0);
